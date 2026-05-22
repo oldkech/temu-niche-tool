@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Temu Niche Builder</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <h1>🛍️ Temu Niche Builder</h1>
+    <span id="product-counter" class="badge">0 products</span>
+  </header>
+
+  <!-- Product list -->
+  <section class="section">
+    <div id="empty-state" class="empty-state">
+      <p>No products selected yet.</p>
+      <p class="hint">Browse a Temu product page and click<br><strong>✓ Add to Niche Page</strong></p>
+    </div>
+    <ul id="product-list"></ul>
+  </section>
+
+  <!-- Generation options -->
+  <section class="section options">
+    <label for="page-title">Page Title</label>
+    <input
+      id="page-title"
+      type="text"
+      placeholder="e.g. Best Kitchen Gadgets Under $10"
+      autocomplete="off"
+    />
+
+    <label for="keyword">Target Keyword</label>
+    <input
+      id="keyword"
+      type="text"
+      placeholder="e.g. cheap kitchen gadgets"
+      autocomplete="off"
+    />
+
+    <label for="site-select">Publish To</label>
+    <select id="site-select">
+      <option value="couponhubusa.com">couponhubusa.com</option>
+      <option value="couponcodesglitch.com">couponcodesglitch.com</option>
+    </select>
+  </section>
+
+  <!-- Actions -->
+  <section class="section actions">
+    <button id="generate-btn" class="btn-generate">⚡ Generate Niche Page</button>
+    <button id="clear-btn" class="btn-clear">🗑 Clear All</button>
+  </section>
+
+  <!-- Status -->
+  <div id="status" class="status hidden"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
