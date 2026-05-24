@@ -25,7 +25,46 @@ function toSlug(title) {
     .replace(/-+/g, '-');
 }
 
+// Derive a page title from products when none is provided
+function autoTitle(products) {
+  const cats = products.flatMap(p => p.categories || []);
+  if (cats.length > 0) {
+    const freq = {};
+    cats.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+    return `Best ${top} Deals on Temu 2026`;
+  }
+  const words = (products[0]?.title || 'Temu Products').split(/\s+/).slice(0, 4).join(' ');
+  return `${words} – Best Deals 2026`;
+}
+
+// Derive a focus keyword from products when none is provided
+function autoKeyword(products) {
+  const cats = products.flatMap(p => p.categories || []);
+  if (cats.length > 0) {
+    const freq = {};
+    cats.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+    return `cheap ${top.toLowerCase()} deals`;
+  }
+  const stop = new Set(['the','a','an','and','or','for','in','on','at','to','with','of','from','pcs','pc','set','pack','new','mini']);
+  const freq = {};
+  products.forEach(p => {
+    (p.title || '').toLowerCase().split(/[\s,\-/]+/).forEach(w => {
+      const c = w.replace(/[^a-z0-9]/g, '');
+      if (c.length > 3 && !stop.has(c)) freq[c] = (freq[c] || 0) + 1;
+    });
+  });
+  const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([w]) => w);
+  return top.length ? `${top.join(' ')} deals` : 'temu deals 2026';
+}
+
 async function generateNichePage({ products, pageTitle, keyword }) {
+  const resolvedTitle   = (pageTitle && pageTitle.trim()) || autoTitle(products);
+  const resolvedKeyword = (keyword  && keyword.trim())   || autoKeyword(products);
+  pageTitle = resolvedTitle;
+  keyword   = resolvedKeyword;
+
   const productSummaries = buildProductSummaries(products);
   const featuredImageUrl = products.find(p => p.images && p.images.length > 0)?.images[0] || '';
 

@@ -1,15 +1,13 @@
 'use strict';
 
 // --- DOM refs ---
-const productList   = document.getElementById('product-list');
-const emptyState    = document.getElementById('empty-state');
-const counter       = document.getElementById('product-counter');
-const pageTitleInput = document.getElementById('page-title');
-const keywordInput  = document.getElementById('keyword');
-const siteSelect    = document.getElementById('site-select');
-const generateBtn   = document.getElementById('generate-btn');
-const clearBtn      = document.getElementById('clear-btn');
-const statusEl      = document.getElementById('status');
+const productList = document.getElementById('product-list');
+const emptyState  = document.getElementById('empty-state');
+const counter     = document.getElementById('product-counter');
+const siteSelect  = document.getElementById('site-select');
+const generateBtn = document.getElementById('generate-btn');
+const clearBtn    = document.getElementById('clear-btn');
+const statusEl    = document.getElementById('status');
 
 let products = [];
 
@@ -48,21 +46,17 @@ function renderProducts() {
     const li = document.createElement('li');
     li.className = 'product-item';
 
-    // Thumbnail
     if (p.images && p.images.length > 0) {
       const img = document.createElement('img');
       img.className = 'product-thumb';
       img.src = p.images[0];
       img.alt = p.title || 'Product';
-      img.onerror = () => {
-        img.replaceWith(makePlaceholder());
-      };
+      img.onerror = () => img.replaceWith(makePlaceholder());
       li.appendChild(img);
     } else {
       li.appendChild(makePlaceholder());
     }
 
-    // Info
     const info = document.createElement('div');
     info.className = 'product-info';
 
@@ -79,7 +73,6 @@ function renderProducts() {
     info.appendChild(price);
     li.appendChild(info);
 
-    // Remove button
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn-remove';
     removeBtn.title = 'Remove';
@@ -128,7 +121,45 @@ clearBtn.addEventListener('click', () => {
   });
 });
 
-// --- Generate ---
+// --- Auto-generate title from product categories / titles ---
+
+function autoGenerateTitle(prods) {
+  const cats = prods.flatMap(p => p.categories || []);
+  if (cats.length > 0) {
+    const freq = {};
+    cats.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+    return `Best ${top} Deals on Temu 2026`;
+  }
+  // Fallback: first four words of the first product title
+  const words = (prods[0]?.title || 'Temu Products').split(/\s+/).slice(0, 4).join(' ');
+  return `${words} – Best Deals 2026`;
+}
+
+// --- Auto-generate focus keyword from categories / title words ---
+
+function autoGenerateKeyword(prods) {
+  const cats = prods.flatMap(p => p.categories || []);
+  if (cats.length > 0) {
+    const freq = {};
+    cats.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
+    const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+    return `cheap ${top.toLowerCase()} deals`;
+  }
+  // Fallback: most frequent meaningful words across all product titles
+  const stop = new Set(['the','a','an','and','or','for','in','on','at','to','with','of','from','pcs','pc','set','pack','new','mini']);
+  const freq = {};
+  prods.forEach(p => {
+    (p.title || '').toLowerCase().split(/[\s,\-/]+/).forEach(w => {
+      const c = w.replace(/[^a-z0-9]/g, '');
+      if (c.length > 3 && !stop.has(c)) freq[c] = (freq[c] || 0) + 1;
+    });
+  });
+  const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([w]) => w);
+  return top.length ? `${top.join(' ')} deals` : 'temu deals 2026';
+}
+
+// --- Generate & Publish ---
 
 generateBtn.addEventListener('click', async () => {
   if (products.length === 0) {
@@ -136,28 +167,16 @@ generateBtn.addEventListener('click', async () => {
     return;
   }
 
-  const pageTitle = pageTitleInput.value.trim();
-  const keyword   = keywordInput.value.trim();
   const site      = siteSelect.value;
+  const pageTitle = autoGenerateTitle(products);
+  const keyword   = autoGenerateKeyword(products);
 
-  if (!pageTitle) {
-    showStatus('⚠️ Please enter a page title.', 'error');
-    pageTitleInput.focus();
-    return;
-  }
-  if (!keyword) {
-    showStatus('⚠️ Please enter a target keyword.', 'error');
-    keywordInput.focus();
-    return;
-  }
-
-  generateBtn.disabled = true;
-
-  const sites = site === 'both'
+  const sites     = site === 'both'
     ? ['couponhubusa.com', 'couponcodesglitch.com']
     : [site];
-
   const siteLabel = site === 'both' ? 'both sites' : site;
+
+  generateBtn.disabled = true;
   showStatus(`⏳ Generating niche page with Claude AI and publishing to ${siteLabel}… this may take 30–90 seconds.`, 'loading');
 
   async function callGenerate(targetSite) {
@@ -177,16 +196,13 @@ generateBtn.addEventListener('click', async () => {
     if (sites.length === 1) {
       const data = await callGenerate(sites[0]);
       const link = data.url || data.link || data.pageUrl || '';
-      if (link) {
-        showStatus(
-          `✅ Page published!<br><a href="${link}" target="_blank">${link}</a>`,
-          'success'
-        );
-      } else {
-        showStatus('✅ Page generated successfully!', 'success');
-      }
+      showStatus(
+        link
+          ? `✅ Page published!<br><a href="${link}" target="_blank">${link}</a>`
+          : '✅ Page generated successfully!',
+        'success'
+      );
     } else {
-      // Publish to both sites sequentially to avoid overloading Claude
       showStatus('⏳ Publishing to couponhubusa.com…', 'loading');
       const result1 = await callGenerate(sites[0]);
 
