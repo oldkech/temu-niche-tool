@@ -6,6 +6,7 @@ const emptyState  = document.getElementById('empty-state');
 const counter     = document.getElementById('product-counter');
 const siteSelect  = document.getElementById('site-select');
 const generateBtn = document.getElementById('generate-btn');
+const cancelBtn   = document.getElementById('cancel-btn');
 const clearBtn    = document.getElementById('clear-btn');
 const statusEl    = document.getElementById('status');
 
@@ -22,6 +23,18 @@ function hideStatus() {
   statusEl.className = 'status hidden';
   statusEl.innerHTML = '';
 }
+
+// ─── Cancel / Reset ────────────────────────────────────────────────────────────
+
+function resetJobState() {
+  chrome.storage.local.remove('generationJob', () => {
+    generateBtn.disabled = false;
+    cancelBtn.classList.add('hidden');
+    hideStatus();
+  });
+}
+
+cancelBtn.addEventListener('click', resetJobState);
 
 // ─── Counter ───────────────────────────────────────────────────────────────────
 
@@ -190,19 +203,30 @@ function renderJobResults(job) {
   }
 }
 
+const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
 // Restore UI from a saved job when the popup is opened
 function restoreJobState(job) {
   if (!job || job.status === 'idle') return;
 
   if (job.status === 'running') {
-    const elapsed  = Math.round((Date.now() - (job.startedAt || Date.now())) / 1000);
-    const timeStr  = elapsed < 60 ? `${elapsed}s` : `${Math.round(elapsed / 60)}m`;
-    const running  = (job.results || []).find(r => r.status === 'running');
-    const siteStr  = running ? running.site : (job.sites || []).join(' + ');
+    const elapsed = Date.now() - (job.startedAt || Date.now());
+    if (elapsed > JOB_TIMEOUT_MS) {
+      // Job has been running too long — auto-clear it
+      chrome.storage.local.remove('generationJob');
+      showStatus('⚠️ Previous job timed out and was cleared.', 'error');
+      return;
+    }
+    const elapsedSec = Math.round(elapsed / 1000);
+    const timeStr    = elapsedSec < 60 ? `${elapsedSec}s` : `${Math.round(elapsedSec / 60)}m`;
+    const running    = (job.results || []).find(r => r.status === 'running');
+    const siteStr    = running ? running.site : (job.sites || []).join(' + ');
     showStatus(`⏳ Publishing to ${siteStr}… (${timeStr} elapsed) — safe to close this popup.`, 'loading');
     generateBtn.disabled = true;
+    cancelBtn.classList.remove('hidden');
   } else {
     generateBtn.disabled = false;
+    cancelBtn.classList.remove('hidden');
     renderJobResults(job);
   }
 }
@@ -212,15 +236,24 @@ function restoreJobState(job) {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes.generationJob) return;
   const job = changes.generationJob.newValue;
-  if (!job) return;
+
+  // Job was cleared (e.g. by cancel button from another popup instance)
+  if (!job) {
+    generateBtn.disabled = false;
+    cancelBtn.classList.add('hidden');
+    hideStatus();
+    return;
+  }
 
   if (job.status === 'running') {
     const running = (job.results || []).find(r => r.status === 'running');
     const siteStr = running ? running.site : 'site';
     showStatus(`⏳ Publishing to ${siteStr}… — safe to close this popup.`, 'loading');
     generateBtn.disabled = true;
+    cancelBtn.classList.remove('hidden');
   } else {
     generateBtn.disabled = false;
+    cancelBtn.classList.remove('hidden');
     renderJobResults(job);
   }
 });
