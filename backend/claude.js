@@ -232,12 +232,25 @@ ALL <a class="cta-btn"> and <a class="coupon-cta"> links MUST use href="${AFFILI
 
 Return ONLY the JSON object. No markdown. No explanation.`;
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 8000,
-    system,
-    messages: [{ role: 'user', content: user }],
-  });
+  const promptChars = system.length + user.length;
+  console.log(`  [claude] API call starting | products: ${products.length} | prompt: ~${promptChars} chars`);
+  const apiStart = Date.now();
+
+  const response = await client.messages.create(
+    {
+      model:      'claude-sonnet-4-6',
+      max_tokens: 8000,
+      system,
+      messages:   [{ role: 'user', content: user }],
+    },
+    { timeout: 55_000 } // SDK-level timeout, slightly under server's 60s outer limit
+  );
+
+  const apiElapsed = ((Date.now() - apiStart) / 1000).toFixed(1);
+  console.log(`  [claude] API call done (${apiElapsed}s) | stop_reason: ${response.stop_reason} | output_tokens: ${response.usage?.output_tokens ?? '?'}`);
+
+  console.log(`  [claude] Parsing JSON response…`);
+  const parseStart = Date.now();
 
   let text = response.content[0].text.trim()
     .replace(/^```json\s*/i, '')
@@ -248,8 +261,9 @@ Return ONLY the JSON object. No markdown. No explanation.`;
   let parsed;
   try {
     parsed = JSON.parse(text);
+    console.log(`  [claude] JSON parsed OK (${((Date.now() - parseStart) / 1000).toFixed(2)}s)`);
   } catch (e) {
-    console.warn('Claude did not return valid JSON — wrapping as html_body fallback');
+    console.warn(`  [claude] JSON parse failed — wrapping raw text as html_body fallback`);
     parsed = {
       title:             pageTitle,
       slug:              toSlug(pageTitle),
@@ -291,12 +305,15 @@ Return ONLY the JSON object. No markdown. No explanation.`;
   if (!parsed.tags.includes(COUPON_PRIMARY))     parsed.tags.push(COUPON_PRIMARY);
 
   // HTML post-processing
+  console.log(`  [claude] Post-processing HTML…`);
+  const ppStart = Date.now();
   let html = parsed.html_body || '';
   html = injectCouponCss(html);
   html = injectCouponBanner(html);
   html = injectClosingSection(html);
   html = fixCtaLinks(html);
   parsed.html_body = html;
+  console.log(`  [claude] Post-processing done (${((Date.now() - ppStart) / 1000).toFixed(2)}s) | final html: ${html.length} chars`);
 
   return parsed;
 }
