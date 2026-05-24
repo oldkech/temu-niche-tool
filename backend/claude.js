@@ -44,7 +44,7 @@ const COUPON_CSS = `  .coupon-banner{background:linear-gradient(135deg,#f97316,#
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildProductSummaries(products) {
-  return products.map((p, i) => [
+  return products.slice(0, 3).map((p, i) => [
     `### Product ${i + 1}: ${p.title || 'Untitled'}`,
     `- Price: ${p.price || 'N/A'}`,
     `- Rating: ${p.rating || 'N/A'}/5 (${p.reviewCount || 0} reviews)`,
@@ -147,90 +147,45 @@ You produce clean, engaging, SEO-optimised niche pages that convert readers into
 Write in a warm, helpful tone. Never fabricate prices or ratings — use only the data provided. \
 You MUST return ONLY valid JSON — no markdown fences, no prose before or after the JSON object.`;
 
-  const user = `Create a complete, professional niche page and return it as a single JSON object.
+  const user = `Create a niche affiliate page and return ONLY valid JSON (no markdown).
 
-=== PAGE BRIEF ===
-Title: ${pageTitle}
-Target keyword: "${keyword}"
-Primary coupon code: ${COUPON_PRIMARY}  |  Backup code: ${COUPON_BACKUP}
-Affiliate URL for ALL buttons: ${AFFILIATE_URL}
-Products: ${products.length}
-Featured image URL: ${featuredImageUrl}
+Title: ${pageTitle} | Keyword: "${keyword}"
+Coupon: ${COUPON_PRIMARY} | Backup: ${COUPON_BACKUP} | Affiliate: ${AFFILIATE_URL}
+Featured image: ${featuredImageUrl}
 
 === PRODUCTS ===
 ${productSummaries}
 
-=== JSON STRUCTURE TO RETURN ===
+=== JSON STRUCTURE ===
 {
-  "title": "...",
-  "slug": "...",
-  "meta_description": "...",
-  "focus_keyword": "...",
+  "title": "${pageTitle}",
+  "slug": "url-safe-slug",
+  "meta_description": "${META_PREFIX} [one sentence about ${keyword}, 150-160 chars total]",
+  "focus_keyword": "temu coupon code, ${keyword}",
   "html_body": "...",
-  "featured_image_url": "...",
+  "featured_image_url": "${featuredImageUrl}",
   "categories": ["...", "..."],
-  "tags": ["...", "...", "...", "...", "..."],
+  "tags": ["temu coupon code", "${COUPON_PRIMARY}", "..."],
   "faq_schema": [
-    { "question": "...", "answer": "..." },
-    { "question": "...", "answer": "..." },
-    { "question": "...", "answer": "..." },
-    { "question": "...", "answer": "..." },
-    { "question": "...", "answer": "..." }
+    {"question":"${COUPON_FAQ.question}","answer":"[detailed answer mentioning ${COUPON_PRIMARY} and ${COUPON_BACKUP}]"},
+    {"question":"...","answer":"..."},
+    {"question":"...","answer":"..."},
+    {"question":"...","answer":"..."},
+    {"question":"...","answer":"..."}
   ]
 }
 
-=== FIELD SPECS ===
-title: use exactly "${pageTitle}"
-slug: URL-safe (lowercase, hyphens, no special chars)
-meta_description: MUST start with "${META_PREFIX}" then one sentence about "${keyword}" — total 150-160 chars
-focus_keyword: "temu coupon code, ${keyword}"
-html_body: complete HTML fragment (no html/head/body tags). Exact structure:
-  1. <style> block — all CSS including:
-       max-width:960px centered, system-ui font, background #fff, color #1a1a2e
-       .product-card: border 1px solid #e2e8f0, border-radius 12px, padding 24px, margin-bottom 28px, box-shadow 0 2px 8px rgba(0,0,0,.07)
-       .product-card img: max-width 100%, max-height 280px, object-fit contain, border-radius 8px
-       .price: font-size 1.4rem, font-weight 700, color #f97316
-       .cta-btn: display inline-block, background #f97316, color #fff, padding 12px 28px, border-radius 8px, text-decoration none, font-weight 700, margin-top 16px
-       .cta-btn:hover: background #ea580c
-       .coupon-banner: background linear-gradient(135deg,#f97316,#ea580c), border-radius 12px, padding 28px 24px, text-align center, color #fff
-       .coupon-cta: inline-block, background #fff, color #ea580c, padding 12px 28px, border-radius 8px, font-weight 700
-       .promo-footer: background #0f3460, color #fff, border-radius 12px, padding 36px 28px, text-align center
-       .promo-footer h2: color #ffd166
-       .buying-guide, .why-temu: background #f8fafc, border-radius 12px, padding 24px, margin-bottom 28px
-       h2: color #0f3460
-       @media(max-width:600px): .product-card padding 16px
-  2. <h1> — page title with "${keyword}" appearing naturally
-  3. Intro paragraph (80-120 words) optimised for "${keyword}"
-  4. <div class="coupon-banner"> — orange gradient block:
-       headline: "Use Temu Coupon Code <strong>${COUPON_PRIMARY}</strong> for Extra Savings!"
-       subtext: mention ${COUPON_BACKUP} as backup
-       <a class="coupon-cta" href="${AFFILIATE_URL}" target="_blank" rel="nofollow">Claim Your Discount on Temu &rarr;</a>
-  5. One <article class="product-card"> per product:
-       <h2> benefit-led headline (not just the product name)
-       <img src="{first image URL}" alt="..."> (if available)
-       <span class="price">{price}</span>
-       ⭐ rating emoji if rating > 0
-       2-3 sentence benefits paragraph
-       <ul> 3-5 feature bullets
-       <a class="cta-btn" href="${AFFILIATE_URL}" target="_blank" rel="nofollow">Shop on Temu &rarr;</a>
-  6. <section class="buying-guide"> — 3-point buying guide for "${keyword}" shoppers
-  7. <section class="why-temu"> — "Why Shop on Temu?" with 3 benefit bullets
-  8. <section class="promo-footer"> — dark closing block:
-       <h2>Don&rsquo;t Forget Your Temu Coupon Code: ${COUPON_PRIMARY}</h2>
-       Paragraph: ${COUPON_PRIMARY} is the best May 2026 Temu coupon code, works sitewide
-       Backup mention: ${COUPON_BACKUP}
-       <a class="coupon-cta" href="${AFFILIATE_URL}" target="_blank" rel="nofollow">Shop on Temu &amp; Apply Code ${COUPON_PRIMARY} &rarr;</a>
-featured_image_url: use this exact URL unchanged: "${featuredImageUrl}"
-categories: 2-3 WordPress category names
-tags: 5-8 tags — MUST include "temu coupon code" and "${COUPON_PRIMARY}"
-faq_schema: exactly 5 items. Item 1 MUST be:
-  { "question": "${COUPON_FAQ.question}", "answer": "${COUPON_FAQ.answer}" }
-  Items 2-5: real shopper questions about "${keyword}" on Temu.
+html_body is a complete HTML fragment (no html/head/body tags):
+1. <style> — max-width:960px, orange #f97316 accents, dark #0f3460 promo-footer, responsive
+2. <h1> with "${keyword}" naturally
+3. Intro paragraph 80-120 words for "${keyword}"
+4. <div class="coupon-banner"> — orange gradient, ${COUPON_PRIMARY} headline, <a class="coupon-cta" href="${AFFILIATE_URL}">
+5. <article class="product-card"> per product — h2, img, price, benefits, <a class="cta-btn" href="${AFFILIATE_URL}">
+6. <section class="buying-guide"> — 3-point guide for "${keyword}" shoppers
+7. <section class="why-temu"> — 3 benefit bullets
+8. <section class="promo-footer"> — dark block, ${COUPON_PRIMARY} headline, <a class="coupon-cta" href="${AFFILIATE_URL}">
 
-"${keyword}" must appear naturally 4-6 times in html_body.
-ALL <a class="cta-btn"> and <a class="coupon-cta"> links MUST use href="${AFFILIATE_URL}".
-
-Return ONLY the JSON object. No markdown. No explanation.`;
+"${keyword}" appears 4-6 times naturally. ALL .cta-btn and .coupon-cta must use href="${AFFILIATE_URL}".`;
 
   const promptChars = system.length + user.length;
   console.log(`  [claude] API call starting | products: ${products.length} | prompt: ~${promptChars} chars`);
@@ -239,11 +194,11 @@ Return ONLY the JSON object. No markdown. No explanation.`;
   const response = await client.messages.create(
     {
       model:      'claude-sonnet-4-6',
-      max_tokens: 8000,
+      max_tokens: 4000,
       system,
       messages:   [{ role: 'user', content: user }],
     },
-    { timeout: 55_000 } // SDK-level timeout, slightly under server's 60s outer limit
+    { timeout: 115_000 } // SDK-level timeout, slightly under server's 120s outer limit
   );
 
   const apiElapsed = ((Date.now() - apiStart) / 1000).toFixed(1);

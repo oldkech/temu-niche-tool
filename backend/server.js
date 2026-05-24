@@ -10,7 +10,7 @@ const { publishToWordPress }  = require('./wordpress');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-const CLAUDE_TIMEOUT_MS = 60_000;
+const CLAUDE_TIMEOUT_MS = 120_000;
 const WP_TIMEOUT_MS     = 60_000;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
