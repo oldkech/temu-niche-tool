@@ -43,44 +43,43 @@ app.post('/generate', async (req, res) => {
     return res.status(400).json({ message: 'site is required.' });
   }
 
-  console.log(`Generating page: "${pageTitle}" | keyword: "${keyword}" | site: ${site} | products: ${products.length}`);
+  console.log(`[generate] "${pageTitle}" | keyword: "${keyword}" | site: ${site} | products: ${products.length}`);
 
+  let step = 'init';
   try {
-    // Step 1: generate page JSON with Claude
+    step = 'claude';
     console.log('→ Calling Claude AI…');
     const page = await generateNichePage({
       products,
       pageTitle: pageTitle.trim(),
-      keyword: keyword.trim(),
+      keyword:   keyword.trim(),
     });
-    console.log(`→ Claude generated page: "${page.title}" | html_body: ${page.html_body.length} chars | faq items: ${page.faq_schema.length}`);
+    console.log(`→ Claude OK — title: "${page.title}" | html: ${page.html_body.length} chars | faqs: ${page.faq_schema.length}`);
 
-    // Step 2: publish to WordPress
+    step = 'wordpress';
     console.log(`→ Publishing to WordPress (${site})…`);
     const result = await publishToWordPress({
       site,
-      title:             page.title,
-      slug:              page.slug,
-      content:           page.html_body,
-      meta_description:  page.meta_description,
-      focus_keyword:     page.focus_keyword,
+      title:              page.title,
+      slug:               page.slug,
+      content:            page.html_body,
+      meta_description:   page.meta_description,
+      focus_keyword:      page.focus_keyword,
       featured_image_url: page.featured_image_url,
-      categories:        page.categories,
-      tags:              page.tags,
-      faq_schema:        page.faq_schema,
+      categories:         page.categories,
+      tags:               page.tags,
+      faq_schema:         page.faq_schema,
     });
-    console.log(`→ Published! Post ID: ${result.postId} | URL: ${result.url}`);
+    console.log(`→ WordPress OK — post ID: ${result.postId} | URL: ${result.url}`);
 
-    res.json({
-      success: true,
-      postId: result.postId,
-      url:    result.url,
-      slug:   result.slug,
-    });
+    res.json({ success: true, postId: result.postId, url: result.url, slug: result.slug });
 
   } catch (err) {
-    console.error('Generate error:', err.message);
-    res.status(500).json({ message: err.message });
+    console.error(`[generate] FAILED at step "${step}" for site "${site}":`, err.stack || err.message);
+    res.status(500).json({
+      message: `Failed at step "${step}": ${err.message}`,
+      step,
+    });
   }
 });
 

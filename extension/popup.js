@@ -1,6 +1,6 @@
 'use strict';
 
-// --- DOM refs ---
+// ─── DOM refs ──────────────────────────────────────────────────────────────────
 const productList = document.getElementById('product-list');
 const emptyState  = document.getElementById('empty-state');
 const counter     = document.getElementById('product-counter');
@@ -11,7 +11,7 @@ const statusEl    = document.getElementById('status');
 
 let products = [];
 
-// --- Status helper ---
+// ─── Status helpers ────────────────────────────────────────────────────────────
 
 function showStatus(msg, type = 'loading') {
   statusEl.className = `status ${type}`;
@@ -23,14 +23,14 @@ function hideStatus() {
   statusEl.innerHTML = '';
 }
 
-// --- Counter ---
+// ─── Counter ───────────────────────────────────────────────────────────────────
 
 function updateCounter() {
   const n = products.length;
   counter.textContent = `${n} product${n !== 1 ? 's' : ''}`;
 }
 
-// --- Render product list ---
+// ─── Render product list ───────────────────────────────────────────────────────
 
 function renderProducts() {
   productList.innerHTML = '';
@@ -91,7 +91,7 @@ function makePlaceholder() {
   return div;
 }
 
-// --- Load from storage ---
+// ─── Storage helpers ───────────────────────────────────────────────────────────
 
 function loadProducts() {
   chrome.storage.local.get({ selectedProducts: [] }, data => {
@@ -99,8 +99,6 @@ function loadProducts() {
     renderProducts();
   });
 }
-
-// --- Remove single product ---
 
 function removeProduct(index) {
   products.splice(index, 1);
@@ -110,7 +108,7 @@ function removeProduct(index) {
   });
 }
 
-// --- Clear all ---
+// ─── Clear all ─────────────────────────────────────────────────────────────────
 
 clearBtn.addEventListener('click', () => {
   if (products.length === 0) return;
@@ -121,7 +119,7 @@ clearBtn.addEventListener('click', () => {
   });
 });
 
-// --- Auto-generate title from product categories / titles ---
+// ─── Auto-generate title / keyword from products ───────────────────────────────
 
 function autoGenerateTitle(prods) {
   const cats = prods.flatMap(p => p.categories || []);
@@ -131,12 +129,9 @@ function autoGenerateTitle(prods) {
     const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
     return `Best ${top} Deals on Temu 2026`;
   }
-  // Fallback: first four words of the first product title
   const words = (prods[0]?.title || 'Temu Products').split(/\s+/).slice(0, 4).join(' ');
   return `${words} – Best Deals 2026`;
 }
-
-// --- Auto-generate focus keyword from categories / title words ---
 
 function autoGenerateKeyword(prods) {
   const cats = prods.flatMap(p => p.categories || []);
@@ -146,7 +141,6 @@ function autoGenerateKeyword(prods) {
     const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
     return `cheap ${top.toLowerCase()} deals`;
   }
-  // Fallback: most frequent meaningful words across all product titles
   const stop = new Set(['the','a','an','and','or','for','in','on','at','to','with','of','from','pcs','pc','set','pack','new','mini']);
   const freq = {};
   prods.forEach(p => {
@@ -159,7 +153,79 @@ function autoGenerateKeyword(prods) {
   return top.length ? `${top.join(' ')} deals` : 'temu deals 2026';
 }
 
-// --- Generate & Publish ---
+// ─── Backend health check ──────────────────────────────────────────────────────
+
+async function checkBackendHealth() {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch('http://localhost:3000/health', { signal: controller.signal });
+    clearTimeout(timer);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Render job results from storage ──────────────────────────────────────────
+
+function renderJobResults(job) {
+  if (!job || !job.results) return;
+
+  const done = job.results.filter(r => r.status === 'done');
+  const errs = job.results.filter(r => r.status === 'error');
+
+  const urlLines = done.map(r =>
+    r.url ? `<a href="${r.url}" target="_blank">${r.url}</a>` : `${r.site} ✓`
+  );
+  const errLines = errs.map(r => `❌ [${r.site}] ${r.errorMessage || 'unknown error'}`);
+
+  if (done.length > 0) {
+    const header = errs.length > 0
+      ? `⚠️ ${done.length} published, ${errs.length} failed`
+      : done.length === 1 ? '✅ Page published!' : `✅ Published to ${done.length} sites!`;
+    showStatus([header, ...urlLines, ...errLines].join('<br>'), errs.length > 0 ? 'error' : 'success');
+  } else {
+    showStatus(errLines.join('<br>') || '❌ All publishes failed.', 'error');
+  }
+}
+
+// Restore UI from a saved job when the popup is opened
+function restoreJobState(job) {
+  if (!job || job.status === 'idle') return;
+
+  if (job.status === 'running') {
+    const elapsed  = Math.round((Date.now() - (job.startedAt || Date.now())) / 1000);
+    const timeStr  = elapsed < 60 ? `${elapsed}s` : `${Math.round(elapsed / 60)}m`;
+    const running  = (job.results || []).find(r => r.status === 'running');
+    const siteStr  = running ? running.site : (job.sites || []).join(' + ');
+    showStatus(`⏳ Publishing to ${siteStr}… (${timeStr} elapsed) — safe to close this popup.`, 'loading');
+    generateBtn.disabled = true;
+  } else {
+    generateBtn.disabled = false;
+    renderJobResults(job);
+  }
+}
+
+// ─── Live storage listener (updates popup while it's open) ────────────────────
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.generationJob) return;
+  const job = changes.generationJob.newValue;
+  if (!job) return;
+
+  if (job.status === 'running') {
+    const running = (job.results || []).find(r => r.status === 'running');
+    const siteStr = running ? running.site : 'site';
+    showStatus(`⏳ Publishing to ${siteStr}… — safe to close this popup.`, 'loading');
+    generateBtn.disabled = true;
+  } else {
+    generateBtn.disabled = false;
+    renderJobResults(job);
+  }
+});
+
+// ─── Generate & Publish ────────────────────────────────────────────────────────
 
 generateBtn.addEventListener('click', async () => {
   if (products.length === 0) {
@@ -167,71 +233,59 @@ generateBtn.addEventListener('click', async () => {
     return;
   }
 
-  const site      = siteSelect.value;
-  const pageTitle = autoGenerateTitle(products);
-  const keyword   = autoGenerateKeyword(products);
+  generateBtn.disabled = true;
+  showStatus('⏳ Checking backend connection…', 'loading');
 
+  const healthy = await checkBackendHealth();
+  if (!healthy) {
+    showStatus(
+      '❌ Backend not reachable.<br>Run <strong>cd backend &amp;&amp; npm start</strong> in your terminal first.',
+      'error'
+    );
+    generateBtn.disabled = false;
+    return;
+  }
+
+  const site      = siteSelect.value;
   const sites     = site === 'both'
     ? ['couponhubusa.com', 'couponcodesglitch.com']
     : [site];
+  const pageTitle = autoGenerateTitle(products);
+  const keyword   = autoGenerateKeyword(products);
   const siteLabel = site === 'both' ? 'both sites' : site;
 
-  generateBtn.disabled = true;
-  showStatus(`⏳ Generating niche page with Claude AI and publishing to ${siteLabel}… this may take 30–90 seconds.`, 'loading');
+  showStatus(`⏳ Starting generation for ${siteLabel}… safe to close this popup.`, 'loading');
 
-  async function callGenerate(targetSite) {
-    const res = await fetch('http://localhost:3000/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ products, pageTitle, keyword, site: targetSite }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(`[${targetSite}] ${err.message || `Server returned ${res.status}`}`);
+  // Persist job state so reopening the popup shows live progress
+  chrome.storage.local.set({
+    generationJob: {
+      status:    'running',
+      sites,
+      pageTitle,
+      keyword,
+      startedAt: Date.now(),
+      results:   sites.map(s => ({ site: s, status: 'pending' })),
+    },
+  });
+
+  // Hand off to the background service worker — survives popup close / tab changes
+  chrome.runtime.sendMessage(
+    { action: 'startGenerate', payload: { sites, pageTitle, keyword, products } },
+    response => {
+      if (chrome.runtime.lastError) {
+        showStatus(`❌ Background worker error: ${chrome.runtime.lastError.message}`, 'error');
+        generateBtn.disabled = false;
+      }
+      // Result arrives via chrome.storage.onChanged above
     }
-    return res.json();
-  }
-
-  try {
-    if (sites.length === 1) {
-      const data = await callGenerate(sites[0]);
-      const link = data.url || data.link || data.pageUrl || '';
-      showStatus(
-        link
-          ? `✅ Page published!<br><a href="${link}" target="_blank">${link}</a>`
-          : '✅ Page generated successfully!',
-        'success'
-      );
-    } else {
-      showStatus('⏳ Publishing to couponhubusa.com…', 'loading');
-      const result1 = await callGenerate(sites[0]);
-
-      showStatus('⏳ Publishing to couponcodesglitch.com…', 'loading');
-      const result2 = await callGenerate(sites[1]);
-
-      const link1 = result1.url || result1.link || result1.pageUrl || '';
-      const link2 = result2.url || result2.link || result2.pageUrl || '';
-
-      const urlLines = [
-        link1 ? `<a href="${link1}" target="_blank">${link1}</a>` : 'couponhubusa.com ✓',
-        link2 ? `<a href="${link2}" target="_blank">${link2}</a>` : 'couponcodesglitch.com ✓',
-      ];
-      showStatus(`✅ Published to both sites!<br>${urlLines.join('<br>')}`, 'success');
-    }
-
-  } catch (err) {
-    if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-      showStatus(
-        '❌ Could not reach the backend.<br>Make sure the server is running on <strong>localhost:3000</strong>.',
-        'error'
-      );
-    } else {
-      showStatus(`❌ Error: ${err.message}`, 'error');
-    }
-  } finally {
-    generateBtn.disabled = false;
-  }
+  );
 });
 
-// --- Init ---
+// ─── Init ──────────────────────────────────────────────────────────────────────
+
 loadProducts();
+
+// Restore any in-progress or completed job on popup open
+chrome.storage.local.get({ generationJob: { status: 'idle' } }, data => {
+  restoreJobState(data.generationJob);
+});
