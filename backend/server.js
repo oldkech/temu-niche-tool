@@ -46,21 +46,28 @@ app.post('/generate', async (req, res) => {
   console.log(`Generating page: "${pageTitle}" | keyword: "${keyword}" | site: ${site} | products: ${products.length}`);
 
   try {
-    // Step 1: generate HTML with Claude
+    // Step 1: generate page JSON with Claude
     console.log('→ Calling Claude AI…');
-    const html = await generateNichePage({
+    const page = await generateNichePage({
       products,
       pageTitle: pageTitle.trim(),
       keyword: keyword.trim(),
     });
-    console.log(`→ Claude generated ${html.length} characters of HTML`);
+    console.log(`→ Claude generated page: "${page.title}" | html_body: ${page.html_body.length} chars | faq items: ${page.faq_schema.length}`);
 
     // Step 2: publish to WordPress
     console.log(`→ Publishing to WordPress (${site})…`);
     const result = await publishToWordPress({
       site,
-      title: pageTitle.trim(),
-      content: html,
+      title:             page.title,
+      slug:              page.slug,
+      content:           page.html_body,
+      meta_description:  page.meta_description,
+      focus_keyword:     page.focus_keyword,
+      featured_image_url: page.featured_image_url,
+      categories:        page.categories,
+      tags:              page.tags,
+      faq_schema:        page.faq_schema,
     });
     console.log(`→ Published! Post ID: ${result.postId} | URL: ${result.url}`);
 

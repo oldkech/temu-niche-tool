@@ -152,37 +152,55 @@ generateBtn.addEventListener('click', async () => {
   }
 
   generateBtn.disabled = true;
-  showStatus('⏳ Generating niche page with Claude AI… this may take 30–60 seconds.', 'loading');
 
-  const payload = {
-    products,
-    pageTitle,
-    keyword,
-    site,
-  };
+  const sites = site === 'both'
+    ? ['couponhubusa.com', 'couponcodesglitch.com']
+    : [site];
 
-  try {
+  const siteLabel = site === 'both' ? 'both sites' : site;
+  showStatus(`⏳ Generating niche page with Claude AI and publishing to ${siteLabel}… this may take 30–90 seconds.`, 'loading');
+
+  async function callGenerate(targetSite) {
     const res = await fetch('http://localhost:3000/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ products, pageTitle, keyword, site: targetSite }),
     });
-
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(err.message || `Server returned ${res.status}`);
+      throw new Error(`[${targetSite}] ${err.message || `Server returned ${res.status}`}`);
     }
+    return res.json();
+  }
 
-    const data = await res.json();
-    const link = data.url || data.link || data.pageUrl || '';
-
-    if (link) {
-      showStatus(
-        `✅ Page published!<br><a href="${link}" target="_blank">${link}</a>`,
-        'success'
-      );
+  try {
+    if (sites.length === 1) {
+      const data = await callGenerate(sites[0]);
+      const link = data.url || data.link || data.pageUrl || '';
+      if (link) {
+        showStatus(
+          `✅ Page published!<br><a href="${link}" target="_blank">${link}</a>`,
+          'success'
+        );
+      } else {
+        showStatus('✅ Page generated successfully!', 'success');
+      }
     } else {
-      showStatus('✅ Page generated successfully!', 'success');
+      // Publish to both sites sequentially to avoid overloading Claude
+      showStatus('⏳ Publishing to couponhubusa.com…', 'loading');
+      const result1 = await callGenerate(sites[0]);
+
+      showStatus('⏳ Publishing to couponcodesglitch.com…', 'loading');
+      const result2 = await callGenerate(sites[1]);
+
+      const link1 = result1.url || result1.link || result1.pageUrl || '';
+      const link2 = result2.url || result2.link || result2.pageUrl || '';
+
+      const urlLines = [
+        link1 ? `<a href="${link1}" target="_blank">${link1}</a>` : 'couponhubusa.com ✓',
+        link2 ? `<a href="${link2}" target="_blank">${link2}</a>` : 'couponcodesglitch.com ✓',
+      ];
+      showStatus(`✅ Published to both sites!<br>${urlLines.join('<br>')}`, 'success');
     }
 
   } catch (err) {
