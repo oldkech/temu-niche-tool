@@ -43,15 +43,26 @@ const COUPON_CSS = `  .coupon-banner{background:linear-gradient(135deg,#f97316,#
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function upgradeImageUrl(url) {
+  if (!url) return url;
+  url = url.replace(/_thumbnail(?=[.?&]|$)/gi, '_large');
+  url = url.replace(/_\d+x\d+(?=[.?&]|$)/gi, '');
+  return url;
+}
+
+function stripEmojis(html) {
+  return html.replace(/\p{Extended_Pictographic}/gu, '');
+}
+
 function buildProductSummaries(products) {
-  return products.slice(0, 3).map((p, i) => [
+  return products.slice(0, 5).map((p, i) => [
     `### Product ${i + 1}: ${p.title || 'Untitled'}`,
     `- Price: ${p.price || 'N/A'}`,
     `- Rating: ${p.rating || 'N/A'}/5 (${p.reviewCount || 0} reviews)`,
     `- Categories: ${(p.categories || []).join(', ') || 'General'}`,
     `- Affiliate Link: ${p.affiliateLink}`,
     `- Description: ${p.description || 'No description provided.'}`,
-    `- Images: ${(p.images || []).slice(0, 2).join(' | ') || 'none'}`,
+    `- Images: ${(p.images || []).slice(0, 2).map(upgradeImageUrl).join(' | ') || 'none'}`,
   ].join('\n')).join('\n\n');
 }
 
@@ -140,7 +151,7 @@ async function generateNichePage({ products, pageTitle, keyword }) {
   keyword   = (keyword   && keyword.trim())   || autoKeyword(products);
 
   const productSummaries = buildProductSummaries(products);
-  const featuredImageUrl = products.find(p => p.images && p.images.length > 0)?.images[0] || '';
+  const featuredImageUrl = upgradeImageUrl(products.find(p => p.images && p.images.length > 0)?.images[0] || '');
 
   const system = `You are an expert affiliate content writer specialising in deal and coupon sites. \
 You produce clean, engaging, SEO-optimised niche pages that convert readers into buyers. \
@@ -176,16 +187,16 @@ ${productSummaries}
 }
 
 html_body is a complete HTML fragment (no html/head/body tags):
-1. <style> — max-width:960px, orange #f97316 accents, dark #0f3460 promo-footer, responsive
+1. <style> — clean minimal design, max-width:960px, font-family sans-serif, card box-shadow 0 2px 8px rgba(0,0,0,.08), orange #f97316 accents, dark #0f3460 promo-footer, responsive. NO emoji characters anywhere.
 2. <h1> with "${keyword}" naturally
 3. Intro paragraph 80-120 words for "${keyword}"
 4. <div class="coupon-banner"> — orange gradient, ${COUPON_PRIMARY} headline, <a class="coupon-cta" href="${AFFILIATE_URL}">
-5. <article class="product-card"> per product — h2, img, price, benefits, <a class="cta-btn" href="${AFFILIATE_URL}">
+5. Up to 5 <article class="product-card"> — h2 (product name, no emoji), image block (use <img src="[url]" alt="..." loading="lazy" style="width:100%;max-height:220px;object-fit:contain"> if image URL is provided; if no image use <div class="img-placeholder" style="background:#f3f4f6;min-height:180px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:#6b7280;font-weight:500;font-size:.9rem">[product name]</div>), price badge, bullet benefits, <a class="cta-btn" href="${AFFILIATE_URL}">
 6. <section class="buying-guide"> — 3-point guide for "${keyword}" shoppers
 7. <section class="why-temu"> — 3 benefit bullets
 8. <section class="promo-footer"> — dark block, ${COUPON_PRIMARY} headline, <a class="coupon-cta" href="${AFFILIATE_URL}">
 
-"${keyword}" appears 4-6 times naturally. ALL .cta-btn and .coupon-cta must use href="${AFFILIATE_URL}".`;
+"${keyword}" appears 4-6 times naturally. ALL .cta-btn and .coupon-cta must use href="${AFFILIATE_URL}". NO emoji characters anywhere in the HTML — no 🛍️ ⭐ 🔥 or any other emoji icon.`;
 
   const promptChars = system.length + user.length;
   console.log(`  [claude] API call starting | products: ${products.length} | prompt: ~${promptChars} chars`);
@@ -263,6 +274,7 @@ html_body is a complete HTML fragment (no html/head/body tags):
   console.log(`  [claude] Post-processing HTML…`);
   const ppStart = Date.now();
   let html = parsed.html_body || '';
+  html = stripEmojis(html);
   html = injectCouponCss(html);
   html = injectCouponBanner(html);
   html = injectClosingSection(html);
