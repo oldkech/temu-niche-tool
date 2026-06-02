@@ -84,6 +84,7 @@ async function publishToWordPress({
   faq_schema = [],
   status     = 'publish',
 }) {
+  console.log('Password used:', process.env.WP_COUPONHUBUSA_PASSWORD?.slice(0,4));
   const cfg     = getConfig(site);
   const wpStart = Date.now();
   console.log(`  [wp] publishToWordPress starting | site: ${site}`);
