@@ -8,17 +8,17 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const COUPON_PRIMARY = 'ALH082428';
 const COUPON_BACKUP  = 'ALI111905';
 const AFFILIATE_URL  = 'https://temu.to/k/ptbdgyc9tjy';
-const META_PREFIX    = `${COUPON_PRIMARY} is the best verified Temu coupon code for May 2026.`;
+const META_PREFIX    = `${COUPON_PRIMARY} is the best verified Temu coupon code for June 2026.`;
 
 const COUPON_FAQ = {
-  question: 'Is there a Temu coupon code for May 2026?',
-  answer: `Yes! The best verified Temu coupon code for May 2026 is ${COUPON_PRIMARY}. Enter it at checkout to unlock your discount on thousands of products sitewide. If ${COUPON_PRIMARY} has already been used on your account, try backup code ${COUPON_BACKUP}. Both codes are free to use and require no minimum order.`,
+  question: 'Is there a Temu coupon code for June 2026?',
+  answer: `Yes! The best verified Temu coupon code for June 2026 is ${COUPON_PRIMARY}. Enter it at checkout to unlock your discount on thousands of products sitewide. If ${COUPON_PRIMARY} has already been used on your account, try backup code ${COUPON_BACKUP}. Both codes are free to use and require no minimum order.`,
 };
 
 // ─── Static HTML blocks injected after Claude's output ────────────────────────
 
 const COUPON_BANNER_HTML = `<div class="coupon-banner">
-  <span class="coupon-tag">🏷️ EXCLUSIVE COUPON</span>
+  <span class="coupon-tag">EXCLUSIVE COUPON</span>
   <p class="coupon-headline">Use Temu Coupon Code <strong>${COUPON_PRIMARY}</strong> for Extra Savings!</p>
   <p class="coupon-sub">Enter <strong>${COUPON_PRIMARY}</strong> at checkout &middot; Backup code: <strong>${COUPON_BACKUP}</strong></p>
   <a class="coupon-cta" href="${AFFILIATE_URL}" target="_blank" rel="nofollow">Claim Your Discount on Temu &rarr;</a>
@@ -26,7 +26,7 @@ const COUPON_BANNER_HTML = `<div class="coupon-banner">
 
 const CLOSING_SECTION_HTML = `<section class="promo-footer">
   <h2>Don&rsquo;t Forget Your Temu Coupon Code: ${COUPON_PRIMARY}</h2>
-  <p>Before you check out, apply coupon code <strong>${COUPON_PRIMARY}</strong> &mdash; the best verified Temu coupon code for May 2026. It works sitewide on thousands of products including everything on this page.</p>
+  <p>Before you check out, apply coupon code <strong>${COUPON_PRIMARY}</strong> &mdash; the best verified Temu coupon code for June 2026. It works sitewide on thousands of products including everything on this page.</p>
   <p>Backup code if needed: <strong>${COUPON_BACKUP}</strong></p>
   <a class="coupon-cta" href="${AFFILIATE_URL}" target="_blank" rel="nofollow">Shop on Temu &amp; Apply Code ${COUPON_PRIMARY} &rarr;</a>
 </section>`;
@@ -107,6 +107,10 @@ function autoKeyword(products) {
   return top.length ? `${top.join(' ')} deals` : 'temu deals 2026';
 }
 
+function buildFallbackHtml(title, kw) {
+  return `<h1>${title}</h1>\n<p>Discover the best ${kw} deals on Temu. Use coupon code <strong>${COUPON_PRIMARY}</strong> at checkout for extra savings.</p>`;
+}
+
 // ─── HTML post-processors (guaranteed injection regardless of Claude output) ──
 
 // Inject coupon banner after the intro paragraph (first </p> after </h1>)
@@ -139,12 +143,15 @@ function injectCouponCss(html) {
 
 // Ensure coupon FAQ is the first item in the array
 function ensureCouponFaq(faqArray) {
-  const already = faqArray.some(f => /ALH082428|may 2026 coupon/i.test(f.question + f.answer));
+  const already = faqArray.some(f => /ALH082428|june 2026 coupon/i.test(f.question + f.answer));
   if (already) return faqArray;
   return [COUPON_FAQ, ...faqArray];
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
+
+const HTML_START = '===HTML_BODY_START===';
+const HTML_END   = '===HTML_BODY_END===';
 
 async function generateNichePage({ products, pageTitle, keyword }) {
   pageTitle = (pageTitle && pageTitle.trim()) || autoTitle(products);
@@ -156,9 +163,9 @@ async function generateNichePage({ products, pageTitle, keyword }) {
   const system = `You are an expert affiliate content writer specialising in deal and coupon sites. \
 You produce clean, engaging, SEO-optimised niche pages that convert readers into buyers. \
 Write in a warm, helpful tone. Never fabricate prices or ratings — use only the data provided. \
-You MUST return ONLY valid JSON — no markdown fences, no prose before or after the JSON object.`;
+Return EXACTLY two parts with no other prose: first a raw JSON metadata object, then the HTML body between ${HTML_START} and ${HTML_END} markers. No markdown fences anywhere.`;
 
-  const user = `Create a niche affiliate page and return ONLY valid JSON (no markdown).
+  const user = `Create a niche affiliate page. Return EXACTLY this format — raw JSON first, then HTML between markers, nothing else:
 
 Title: ${pageTitle} | Keyword: "${keyword}"
 Coupon: ${COUPON_PRIMARY} | Backup: ${COUPON_BACKUP} | Affiliate: ${AFFILIATE_URL}
@@ -167,13 +174,12 @@ Featured image: ${featuredImageUrl}
 === PRODUCTS ===
 ${productSummaries}
 
-=== JSON STRUCTURE ===
+=== OUTPUT FORMAT ===
 {
   "title": "${pageTitle}",
   "slug": "url-safe-slug",
   "meta_description": "${META_PREFIX} [one sentence about ${keyword}, 150-160 chars total]",
   "focus_keyword": "temu coupon code, ${keyword}",
-  "html_body": "...",
   "featured_image_url": "${featuredImageUrl}",
   "categories": ["...", "..."],
   "tags": ["temu coupon code", "${COUPON_PRIMARY}", "..."],
@@ -185,8 +191,11 @@ ${productSummaries}
     {"question":"...","answer":"..."}
   ]
 }
+${HTML_START}
+[complete HTML fragment here — no html/head/body tags]
+${HTML_END}
 
-html_body is a complete HTML fragment (no html/head/body tags):
+HTML fragment rules:
 1. <style> — clean minimal design, max-width:960px, font-family sans-serif, card box-shadow 0 2px 8px rgba(0,0,0,.08), orange #f97316 accents, dark #0f3460 promo-footer, responsive. NO emoji characters anywhere.
 2. <h1> with "${keyword}" naturally
 3. Intro paragraph 80-120 words for "${keyword}"
@@ -196,7 +205,7 @@ html_body is a complete HTML fragment (no html/head/body tags):
 7. <section class="why-temu"> — 3 benefit bullets
 8. <section class="promo-footer"> — dark block, ${COUPON_PRIMARY} headline, <a class="coupon-cta" href="${AFFILIATE_URL}">
 
-"${keyword}" appears 4-6 times naturally. ALL .cta-btn and .coupon-cta must use href="${AFFILIATE_URL}". NO emoji characters anywhere in the HTML — no 🛍️ ⭐ 🔥 or any other emoji icon.`;
+"${keyword}" appears 4-6 times naturally. ALL .cta-btn and .coupon-cta must use href="${AFFILIATE_URL}". NO emoji characters anywhere in the HTML.`;
 
   const promptChars = system.length + user.length;
   console.log(`  [claude] API call starting | products: ${products.length} | prompt: ~${promptChars} chars`);
@@ -205,41 +214,54 @@ html_body is a complete HTML fragment (no html/head/body tags):
   const response = await client.messages.create(
     {
       model:      'claude-sonnet-4-6',
-      max_tokens: 4000,
+      max_tokens: 8000,
       system,
       messages:   [{ role: 'user', content: user }],
     },
-    { timeout: 115_000 } // SDK-level timeout, slightly under server's 120s outer limit
+    { timeout: 115_000 }
   );
 
   const apiElapsed = ((Date.now() - apiStart) / 1000).toFixed(1);
   console.log(`  [claude] API call done (${apiElapsed}s) | stop_reason: ${response.stop_reason} | output_tokens: ${response.usage?.output_tokens ?? '?'}`);
 
-  console.log(`  [claude] Parsing JSON response…`);
+  console.log(`  [claude] Parsing response…`);
   const parseStart = Date.now();
 
-  let text = response.content[0].text.trim()
+  const raw = response.content[0].text;
+
+  const markerStart = raw.indexOf(HTML_START);
+  const markerEnd   = raw.indexOf(HTML_END);
+  const hasMarkers  = markerStart !== -1 && markerEnd > markerStart;
+
+  const htmlBody = hasMarkers
+    ? raw.slice(markerStart + HTML_START.length, markerEnd).trim()
+    : '';
+  const jsonText = (hasMarkers ? raw.slice(0, markerStart) : raw)
+    .trim()
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/, '')
     .trim();
 
+  if (!hasMarkers) console.warn('  [claude] HTML markers not found in response');
+
   let parsed;
   try {
-    parsed = JSON.parse(text);
-    console.log(`  [claude] JSON parsed OK (${((Date.now() - parseStart) / 1000).toFixed(2)}s)`);
+    parsed = JSON.parse(jsonText);
+    parsed.html_body = htmlBody;
+    console.log(`  [claude] Parsed OK (${((Date.now() - parseStart) / 1000).toFixed(2)}s)`);
   } catch (e) {
-    console.warn(`  [claude] JSON parse failed — wrapping raw text as html_body fallback`);
+    console.warn(`  [claude] JSON parse failed — using clean fallback | error: ${e.message}`);
     parsed = {
-      title:             pageTitle,
-      slug:              toSlug(pageTitle),
-      meta_description:  META_PREFIX,
-      focus_keyword:     `temu coupon code, ${keyword}`,
-      html_body:         text,
+      title:              pageTitle,
+      slug:               toSlug(pageTitle),
+      meta_description:   META_PREFIX,
+      focus_keyword:      `temu coupon code, ${keyword}`,
+      html_body:          htmlBody || buildFallbackHtml(pageTitle, keyword),
       featured_image_url: featuredImageUrl,
-      categories:        ['Deals'],
-      tags:              [keyword, 'temu coupon code', COUPON_PRIMARY],
-      faq_schema:        [],
+      categories:         ['Deals'],
+      tags:               [keyword, 'temu coupon code', COUPON_PRIMARY],
+      faq_schema:         [],
     };
   }
 
