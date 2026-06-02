@@ -31,6 +31,10 @@ const CLOSING_SECTION_HTML = `<section class="promo-footer">
   <a class="coupon-cta" href="${AFFILIATE_URL}" target="_blank" rel="nofollow">Shop on Temu &amp; Apply Code ${COUPON_PRIMARY} &rarr;</a>
 </section>`;
 
+const BULLET_CSS = `  .tnp-content ul{list-style:none;padding:0;margin:0 0 16px 0}
+  .tnp-content ul li{position:relative;padding-left:1.6em;margin-bottom:8px}
+  .tnp-content ul li::before{content:"●";position:absolute;left:0;top:.6em;font-size:.5em;color:#f97316}`;
+
 const COUPON_CSS = `  .coupon-banner{background:linear-gradient(135deg,#f97316,#ea580c);border-radius:12px;padding:28px 24px;margin:28px 0;text-align:center;color:#fff}
   .coupon-tag{display:inline-block;background:rgba(0,0,0,.2);border-radius:20px;padding:4px 14px;font-size:.78rem;font-weight:700;letter-spacing:1px;margin-bottom:12px}
   .coupon-headline{font-size:1.25rem;font-weight:700;margin:0 0 8px}
@@ -141,6 +145,19 @@ function injectCouponCss(html) {
   return `<style>\n${COUPON_CSS}\n</style>\n` + html;
 }
 
+// Inject scoped bullet-list CSS (idempotent)
+function injectBulletCss(html) {
+  if (html.includes('tnp-content ul')) return html;
+  if (/<\/style>/i.test(html)) return html.replace(/<\/style>/i, `${BULLET_CSS}\n</style>`);
+  return `<style>\n${BULLET_CSS}\n</style>\n` + html;
+}
+
+// Wrap all content in .tnp-content so scoped CSS cannot bleed into the theme
+function wrapInTnpContent(html) {
+  if (html.includes('class="tnp-content"')) return html;
+  return `<div class="tnp-content">\n${html}\n</div>`;
+}
+
 // Ensure coupon FAQ is the first item in the array
 function ensureCouponFaq(faqArray) {
   const already = faqArray.some(f => /ALH082428|june 2026 coupon/i.test(f.question + f.answer));
@@ -196,7 +213,7 @@ ${HTML_START}
 ${HTML_END}
 
 HTML fragment rules:
-1. <style> — clean minimal design, max-width:960px, font-family sans-serif, card box-shadow 0 2px 8px rgba(0,0,0,.08), orange #f97316 accents, dark #0f3460 promo-footer, responsive. NO emoji characters anywhere.
+1. <style> — ALL rules scoped to .tnp-content (e.g. .tnp-content .product-card{...}), clean minimal design, max-width:960px, font-family sans-serif, card box-shadow 0 2px 8px rgba(0,0,0,.08), orange #f97316 accents, dark #0f3460 promo-footer, responsive. NO emoji characters anywhere.
 2. <h1> with "${keyword}" naturally
 3. Intro paragraph 80-120 words for "${keyword}"
 4. <div class="coupon-banner"> — orange gradient, ${COUPON_PRIMARY} headline, <a class="coupon-cta" href="${AFFILIATE_URL}">
@@ -298,9 +315,11 @@ HTML fragment rules:
   let html = parsed.html_body || '';
   html = stripEmojis(html);
   html = injectCouponCss(html);
+  html = injectBulletCss(html);
   html = injectCouponBanner(html);
   html = injectClosingSection(html);
   html = fixCtaLinks(html);
+  html = wrapInTnpContent(html);
   parsed.html_body = html;
   console.log(`  [claude] Post-processing done (${((Date.now() - ppStart) / 1000).toFixed(2)}s) | final html: ${html.length} chars`);
 
