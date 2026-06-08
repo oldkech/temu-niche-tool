@@ -35,8 +35,7 @@ const BULLET_CSS = `  .tnp-content ul{list-style:none;padding:0;margin:0 0 16px 
   .tnp-content ul li{position:relative;padding-left:1.6em;margin-bottom:8px}
   .tnp-content ul li::before{content:"●";position:absolute;left:0;top:.6em;font-size:.5em;color:#f97316}`;
 
-const IMAGE_CAROUSEL_CSS = `  .tnp-content .product-images{display:flex;overflow-x:auto;gap:8px;margin-bottom:12px;padding-bottom:4px;-webkit-overflow-scrolling:touch}
-  .tnp-content .product-images img{width:200px;height:200px;object-fit:cover;border-radius:8px;flex-shrink:0}`;
+const PRODUCT_IMAGE_CSS = `  .tnp-content .product-card img.product-img{width:100%;max-height:280px;object-fit:cover;border-radius:8px;display:block;margin:0 0 14px}`;
 
 const NO_IMAGE_PLACEHOLDER = `<div class="no-image-placeholder" style="background:#f3f4f6;height:200px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:#9ca3af;font-size:14px;">No image available</div>`;
 
@@ -211,35 +210,36 @@ function injectBulletCss(html) {
   return `<style>\n${BULLET_CSS}\n</style>\n` + html;
 }
 
-// Inject image carousel CSS (idempotent)
-function injectImageCarouselCss(html) {
-  if (html.includes('product-images{') || html.includes('product-images {')) return html;
-  if (/<\/style>/i.test(html)) return html.replace(/<\/style>/i, `${IMAGE_CAROUSEL_CSS}\n</style>`);
-  return `<style>\n${IMAGE_CAROUSEL_CSS}\n</style>\n` + html;
+// Inject product image CSS (idempotent)
+function injectProductImageCss(html) {
+  if (html.includes('product-img{') || html.includes('product-img {')) return html;
+  if (/<\/style>/i.test(html)) return html.replace(/<\/style>/i, `${PRODUCT_IMAGE_CSS}\n</style>`);
+  return `<style>\n${PRODUCT_IMAGE_CSS}\n</style>\n` + html;
 }
 
-// Build carousel HTML from a product's images array
-function buildCarouselHtml(product) {
-  const images = (product.images || []).map(upgradeImageUrl).filter(Boolean);
-  if (images.length === 0) return NO_IMAGE_PLACEHOLDER;
-  const safeAlt = (product.title || 'product').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  const imgs = images.map(url => `<img src="${url}" alt="${safeAlt}" loading="lazy">`).join('\n    ');
-  return `<div class="product-images">\n    ${imgs}\n  </div>`;
-}
-
-// Force-inject product image carousels after each <article class="product-card"> h2
-// Matches products to cards by index (Claude outputs cards in the same order as input)
-function injectProductCarousels(html, products) {
+// Inject one image per product card, matched strictly by index position.
+// products[0] → card 0, products[1] → card 1, etc.
+function injectProductImages(html, products) {
   let cardIndex = 0;
   return html.replace(/(<article[^>]*product-card[^>]*>)([\s\S]*?)(<\/article>)/gi, (match, open, body, close) => {
-    const product = products[cardIndex++];
+    const i = cardIndex++;
+    const product = products[i];
     if (!product) return match;
-    // Skip if a carousel or placeholder was already injected
-    if (body.includes('product-images') || body.includes('no-image-placeholder')) return match;
-    const carousel = buildCarouselHtml(product);
-    // Inject immediately after the closing </h2> tag
-    const patched = body.replace(/(<\/h2>)/, `$1\n${carousel}`);
-    return open + (patched !== body ? patched : carousel + body) + close;
+    // Skip if an image was already injected by Claude (shouldn't happen, but be safe)
+    if (/<img\b/i.test(body)) return match;
+
+    const firstUrl = upgradeImageUrl((product.images || [])[0]);
+    let imgHtml;
+    if (!firstUrl) {
+      imgHtml = NO_IMAGE_PLACEHOLDER;
+    } else {
+      const safeAlt = (product.title || 'product').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      imgHtml = `<img class="product-img" src="${firstUrl}" alt="${safeAlt}" loading="lazy">`;
+    }
+
+    // Inject immediately after </h2>; fall back to prepending to body
+    const patched = body.replace(/(<\/h2>)/, `$1\n${imgHtml}`);
+    return open + (patched !== body ? patched : imgHtml + body) + close;
   });
 }
 
@@ -411,8 +411,8 @@ HTML rules — be concise, output ALL ${products.length} product cards:
   html = stripEmojis(html);
   html = injectCouponCss(html);
   html = injectBulletCss(html);
-  html = injectImageCarouselCss(html);
-  html = injectProductCarousels(html, products);
+  html = injectProductImageCss(html);
+  html = injectProductImages(html, products);
   html = injectCouponBanner(html);
   html = injectClosingSection(html);
   html = fixCtaLinks(html);
