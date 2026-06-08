@@ -37,6 +37,13 @@ const BULLET_CSS = `  .tnp-content ul{list-style:none;padding:0;margin:0 0 16px 
 
 const PRODUCT_IMAGE_CSS = `  .tnp-content .product-card img.product-img{width:100%;max-height:280px;object-fit:cover;border-radius:8px;display:block;margin:0 0 14px}`;
 
+const FAQ_CSS = `  .tnp-content .faq-section{margin:36px 0;padding:28px;background:#f9fafb;border-radius:12px}
+  .tnp-content .faq-section h2{font-size:1.4rem;font-weight:700;margin:0 0 20px;color:#111}
+  .tnp-content .faq-item{border-bottom:1px solid #e5e7eb;padding:16px 0}
+  .tnp-content .faq-item:last-child{border-bottom:none;padding-bottom:0}
+  .tnp-content .faq-item h3{font-size:1rem;font-weight:600;color:#111;margin:0 0 8px}
+  .tnp-content .faq-item p{margin:0;color:#374151;line-height:1.6}`;
+
 const NO_IMAGE_PLACEHOLDER = `<div class="no-image-placeholder" style="background:#f3f4f6;height:200px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:#9ca3af;font-size:14px;">No image available</div>`;
 
 const COUPON_CSS = `  .coupon-banner{background:linear-gradient(135deg,#f97316,#ea580c);border-radius:12px;padding:28px 24px;margin:28px 0;text-align:center;color:#fff}
@@ -243,6 +250,40 @@ function injectProductImages(html, products) {
   });
 }
 
+// Inject FAQ CSS (idempotent)
+function injectFaqCss(html) {
+  if (html.includes('faq-section{') || html.includes('faq-section {')) return html;
+  if (/<\/style>/i.test(html)) return html.replace(/<\/style>/i, `${FAQ_CSS}\n</style>`);
+  return `<style>\n${FAQ_CSS}\n</style>\n` + html;
+}
+
+// Inject visible FAQ HTML before the promo-footer closing section
+function injectFaqSection(html, faqItems) {
+  if (!Array.isArray(faqItems) || faqItems.length === 0) return html;
+  if (html.includes('class="faq-section"')) return html;
+
+  const items = faqItems.map(f => {
+    const q = (f.question || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const a = (f.answer   || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return `  <div class="faq-item"><h3>${q}</h3><p>${a}</p></div>`;
+  }).join('\n');
+
+  const faqHtml = `<section class="faq-section">\n  <h2>Frequently Asked Questions</h2>\n${items}\n</section>`;
+
+  // Place before promo-footer if present, otherwise append
+  const patched = html.replace(/(<section[^>]*class="[^"]*promo-footer[^"]*")/i, `${faqHtml}\n$1`);
+  return patched !== html ? patched : html + '\n' + faqHtml;
+}
+
+// Strip em dashes and en dashes from generated HTML
+function stripDashes(html) {
+  return html
+    .replace(/ — /g, ', ')
+    .replace(/ – /g, ', ')
+    .replace(/—/g, ',')
+    .replace(/–/g, '-');
+}
+
 // Wrap all content in .tnp-content so scoped CSS cannot bleed into the theme
 function wrapInTnpContent(html) {
   if (html.includes('class="tnp-content"')) return html;
@@ -411,12 +452,15 @@ HTML rules — be concise, output ALL ${products.length} product cards:
   html = stripEmojis(html);
   html = injectCouponCss(html);
   html = injectBulletCss(html);
+  html = injectFaqCss(html);
   html = injectProductImageCss(html);
   html = injectProductImages(html, products);
   html = injectCouponBanner(html);
+  html = injectFaqSection(html, parsed.faq_schema);
   html = injectClosingSection(html);
   html = fixCtaLinks(html);
   html = wrapInTnpContent(html);
+  html = stripDashes(html);
   parsed.html_body = html;
   console.log(`  [claude] Post-processing done (${((Date.now() - ppStart) / 1000).toFixed(2)}s) | final html: ${html.length} chars`);
 
