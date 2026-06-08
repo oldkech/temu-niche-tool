@@ -38,35 +38,51 @@
     const seen = new Set();
     const results = [];
 
-    function addImg(src) {
-      if (!src || src.startsWith('data:') || seen.has(src)) return;
-      if (!src.startsWith('http')) return;
+    function cleanAndAdd(src) {
+      if (!src || src.startsWith('data:') || !src.startsWith('http')) return;
+
+      // Strip existing size params and thumbnail suffixes to get base URL
+      let base = src
+        .replace(/[?&]imageView2[^\s"']*/gi, '')
+        .replace(/[?&]$/, '')
+        .replace(/_thumbnail(?=\.(jpe?g|png|webp|gif)|\?|$)/gi, '')
+        .replace(/_\d+x\d+(?=\.(jpe?g|png|webp|gif)|\?|$)/gi, '');
+
+      if (seen.has(base)) return;
       seen.add(src);
-      const clean = src.replace(/(_\d+x\d+)(\.(?:jpg|jpeg|png|webp))/i, '$2');
-      if (!seen.has(clean)) {
-        seen.add(clean);
-        results.push(clean);
-      }
+      seen.add(base);
+
+      // Upgrade to high-quality for Temu's CDN
+      const hq = /img\.kwcdn\.com/i.test(base)
+        ? base + (base.includes('?') ? '&' : '?') + 'imageView2/2/w/800/q/90'
+        : base;
+
+      results.push(hq);
     }
 
-    function isVisible(el) {
+    // 1. Main product image elements — specific Temu selectors first
+    const productSelectors = [
+      '.goods-img img',
+      '[class*="goods-img"] img',
+      '[class*="product-img"] img',
+      '[class*="goods"] img',
+      '[class*="product"] img',
+      '[class*="main-image"] img',
+      '[class*="gallery"] img',
+      '[class*="swiper"] img',
+    ];
+    for (const sel of productSelectors) {
       try {
-        const s = window.getComputedStyle(el);
-        if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
-        const r = el.getBoundingClientRect();
-        return r.width > 0 && r.height > 0;
-      } catch (_) { return true; }
-    }
-
-    // 1. Hero image: largest <img> on page by pixel area (fires after scroll triggers load)
-    let heroImg = null, heroArea = 0;
-    document.querySelectorAll('img').forEach(img => {
-      const area = (img.naturalWidth || 0) * (img.naturalHeight || 0);
-      if (area > heroArea) { heroArea = area; heroImg = img; }
-    });
-    if (heroImg) {
-      addImg(heroImg.src);
-      addImg(heroImg.dataset.src);
+        document.querySelectorAll(sel).forEach(img => {
+          cleanAndAdd(img.src);
+          cleanAndAdd(img.dataset.src);
+          cleanAndAdd(img.dataset.lazySrc);
+          cleanAndAdd(img.dataset.original);
+          if (img.srcset) {
+            img.srcset.split(',').forEach(part => cleanAndAdd(part.trim().split(/\s+/)[0]));
+          }
+        });
+      } catch (_) {}
     }
 
     // 2. og:image / twitter:image meta tags
@@ -74,29 +90,13 @@
       document.querySelector('meta[property="og:image"]'),
       document.querySelector('meta[name="twitter:image"]'),
       document.querySelector('meta[name="twitter:image:src"]'),
-    ].forEach(el => { if (el) addImg(el.content || el.getAttribute('content')); });
-    const imgSrcLink = document.querySelector('link[rel="image_src"]');
-    if (imgSrcLink) addImg(imgSrcLink.href);
+    ].forEach(el => { if (el) cleanAndAdd(el.content || el.getAttribute('content')); });
 
-    // 3. Visible imgs with kwcdn.com or temu.com in src
+    // 3. Any remaining img with kwcdn.com in any source attribute
     document.querySelectorAll('img').forEach(img => {
-      if (!isVisible(img)) return;
       [img.src, img.dataset.src, img.dataset.lazySrc, img.dataset.original].forEach(src => {
-        if (src && /img\.kwcdn\.com|temu\.com/i.test(src)) addImg(src);
+        if (src && /img\.kwcdn\.com/i.test(src)) cleanAndAdd(src);
       });
-      if (img.srcset) {
-        img.srcset.split(',').forEach(part => {
-          const url = part.trim().split(/\s+/)[0];
-          if (url && /img\.kwcdn\.com|temu\.com/i.test(url)) addImg(url);
-        });
-      }
-    });
-
-    // 4. data-src / data-lazy-src on ALL img tags (catches not-yet-visible lazy images)
-    document.querySelectorAll('img').forEach(img => {
-      addImg(img.dataset.src);
-      addImg(img.dataset.lazySrc);
-      addImg(img.dataset.original);
     });
 
     console.log(`[Temu Niche] extractImages: ${results.length} images found`);

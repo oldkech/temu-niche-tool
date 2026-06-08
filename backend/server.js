@@ -61,9 +61,10 @@ app.post('/generate', async (req, res) => {
     const imgs  = Array.isArray(p.images) ? p.images.length : 0;
     const title = (p.title || 'Untitled').slice(0, 55);
     if (imgs === 0) {
-      console.log(`          [${String(i + 1).padStart(2)}] imgs=0  SKIPPED - no images  "${title}"`);
+      console.log(`          [${String(i + 1).padStart(2)}] SKIPPED - no images  "${title}"`);
     } else {
-      console.log(`          [${String(i + 1).padStart(2)}] imgs=${imgs}  "${title}"`);
+      const urlPreview = p.images.slice(0, 3).map(u => (u || '').slice(0, 80)).join('\n                    ');
+      console.log(`          [${String(i + 1).padStart(2)}] Product "${title}": ${imgs} images found:\n                    ${urlPreview}${imgs > 3 ? `\n                    ...+${imgs - 3} more` : ''}`);
       validProducts.push(p);
     }
   });

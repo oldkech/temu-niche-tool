@@ -77,6 +77,19 @@ function updateCounter() {
   counter.textContent = `${n} product${n !== 1 ? 's' : ''}`;
 }
 
+// ─── Thumbnail URL helper ──────────────────────────────────────────────────────
+
+function thumbUrl(src) {
+  if (!src) return '';
+  // Use a small 80px version in popup (avoids loading 800px images for tiny thumbnails)
+  if (/img\.kwcdn\.com/i.test(src)) {
+    return src.includes('imageView2')
+      ? src.replace(/imageView2\/[^\s&"']*/i, 'imageView2/2/w/80/q/70')
+      : src + (src.includes('?') ? '&' : '?') + 'imageView2/2/w/80/q/70';
+  }
+  return src;
+}
+
 // ─── Render product list ───────────────────────────────────────────────────────
 
 function renderProducts() {
@@ -96,7 +109,7 @@ function renderProducts() {
     if (p.images && p.images.length > 0) {
       const img = document.createElement('img');
       img.className = 'product-thumb';
-      img.src = p.images[0];
+      img.src = thumbUrl(p.images[0]);
       img.alt = p.title || 'Product';
       img.onerror = () => img.replaceWith(makePlaceholder());
       li.appendChild(img);
