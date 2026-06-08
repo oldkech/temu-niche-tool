@@ -87,6 +87,21 @@
       });
     });
 
+    // Meta tag image sources (og:image, twitter:image, image_src link)
+    [
+      document.querySelector('meta[property="og:image"]'),
+      document.querySelector('meta[name="twitter:image"]'),
+      document.querySelector('meta[name="twitter:image:src"]'),
+    ].forEach(el => { if (el) addImg(el.content || el.getAttribute('content')); });
+    const imgSrcLink = document.querySelector('link[rel="image_src"]');
+    if (imgSrcLink) addImg(imgSrcLink.href);
+
+    // Any visible img wider than 200px that wasn't caught above
+    document.querySelectorAll('img').forEach(img => {
+      const w = img.naturalWidth || img.width || parseInt(img.getAttribute('width') || '0', 10);
+      if (w > 200) addImg(img.src);
+    });
+
     return results;
   }
 
