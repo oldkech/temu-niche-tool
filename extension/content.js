@@ -38,6 +38,17 @@
     const seen = new Set();
     const results = [];
 
+    function addImg(src) {
+      if (!src || src.startsWith('data:') || seen.has(src)) return;
+      if (!src.startsWith('http')) return;
+      seen.add(src);
+      const clean = src.replace(/(_\d+x\d+)(\.(?:jpg|jpeg|png|webp))/i, '$2');
+      if (!seen.has(clean)) {
+        seen.add(clean);
+        results.push(clean);
+      }
+    }
+
     const selectors = [
       '[class*="gallery"] img',
       '[class*="swiper"] img',
@@ -48,31 +59,33 @@
       '[class*="preview"] img',
       '[class*="main-image"] img',
       '[class*="slide"] img',
+      '[class*="image-list"] img',
+      '[class*="img-list"] img',
+      '[class*="goods-gallery"] img',
+      '[class*="product-gallery"] img',
+      '[class*="pic-list"] img',
     ];
 
     for (const sel of selectors) {
       try {
         document.querySelectorAll(sel).forEach(img => {
-          const src = img.src || img.dataset.src || img.dataset.lazySrc || '';
-          if (!src || src.startsWith('data:') || seen.has(src)) return;
-          if (!src.startsWith('http')) return;
-          seen.add(src);
-          // Strip dimension suffixes to get the highest-res version
-          results.push(src.replace(/(_\d+x\d+)(\.(?:jpg|jpeg|png|webp))/i, '$2'));
+          addImg(img.src);
+          addImg(img.dataset.src);
+          addImg(img.dataset.lazySrc);
+          addImg(img.dataset.original);
+          if (img.srcset) {
+            img.srcset.split(',').forEach(part => addImg(part.trim().split(/\s+/)[0]));
+          }
         });
       } catch (_) {}
     }
 
-    // Fallback: any img that looks like a Temu product image
-    if (results.length === 0) {
-      document.querySelectorAll('img').forEach(img => {
-        const src = img.src || '';
-        if (src && !seen.has(src) && /temu\.com.*(goods|product)/i.test(src)) {
-          seen.add(src);
-          results.push(src);
-        }
+    // Always scan all imgs for Temu's CDN domain (img.kwcdn.com) to catch lazy-loaded images
+    document.querySelectorAll('img').forEach(img => {
+      [img.src, img.dataset.src, img.dataset.lazySrc, img.dataset.original].forEach(src => {
+        if (src && /img\.kwcdn\.com|temu\.com.*(goods|product)/i.test(src)) addImg(src);
       });
-    }
+    });
 
     return results;
   }

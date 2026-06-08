@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Temu Niche Builder</title>
   <link rel="stylesheet" href="popup.css" />
+  <style>
+    .terminal-section{padding:4px 12px 8px}
+    .terminal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+    .terminal-header span{font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+    .btn-clear-log{background:none;border:none;color:#64748b;font-size:10px;cursor:pointer;padding:2px 6px;border-radius:3px}
+    .btn-clear-log:hover{color:#f97316}
+    .terminal-log{background:#0d1117;border:1px solid #1e2937;border-radius:6px;padding:8px;height:110px;overflow-y:auto;font-family:monospace;font-size:11px;color:#7dd3fc;word-break:break-all}
+    .terminal-log div{line-height:1.6}
+    .terminal-log .log-success{color:#4ade80}
+    .terminal-log .log-error{color:#f87171}
+    .terminal-log .log-warn{color:#fbbf24}
+  </style>
 </head>
 <body>
   <!-- Header -->
@@ -41,6 +53,15 @@
 
   <!-- Status -->
   <div id="status" class="status hidden"></div>
+
+  <!-- Terminal log -->
+  <section class="section terminal-section">
+    <div class="terminal-header">
+      <span>Status Log</span>
+      <button id="clear-log-btn" class="btn-clear-log">clear</button>
+    </div>
+    <div id="terminal-log" class="terminal-log"></div>
+  </section>
 
   <script src="popup.js"></script>
 </body>

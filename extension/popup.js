@@ -9,6 +9,8 @@ const generateBtn = document.getElementById('generate-btn');
 const cancelBtn   = document.getElementById('cancel-btn');
 const clearBtn    = document.getElementById('clear-btn');
 const statusEl    = document.getElementById('status');
+const terminalEl  = document.getElementById('terminal-log');
+const clearLogBtn = document.getElementById('clear-log-btn');
 
 let products = [];
 
@@ -23,6 +25,38 @@ function hideStatus() {
   statusEl.className = 'status hidden';
   statusEl.innerHTML = '';
 }
+
+// ─── Terminal log ──────────────────────────────────────────────────────────────
+
+function renderLog(entries) {
+  if (!terminalEl) return;
+  terminalEl.innerHTML = (entries || []).map(e => {
+    const cls = e.type ? ` class="log-${e.type}"` : '';
+    return `<div${cls}>${e.text}</div>`;
+  }).join('');
+  terminalEl.scrollTop = terminalEl.scrollHeight;
+}
+
+function appendLog(text, type) {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  const entry = { text: `[${hh}:${mm}:${ss}] ${text}`, type: type || '' };
+  chrome.storage.local.get({ generationLog: [] }, data => {
+    const log = data.generationLog.slice(-99);
+    log.push(entry);
+    chrome.storage.local.set({ generationLog: log });
+  });
+}
+
+if (clearLogBtn) {
+  clearLogBtn.addEventListener('click', () => {
+    chrome.storage.local.set({ generationLog: [] }, () => renderLog([]));
+  });
+}
+
+chrome.storage.local.get({ generationLog: [] }, data => renderLog(data.generationLog));
 
 // ─── Cancel / Reset ────────────────────────────────────────────────────────────
 
@@ -234,8 +268,15 @@ function restoreJobState(job) {
 // ─── Live storage listener (updates popup while it's open) ────────────────────
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes.generationJob) return;
-  const job = changes.generationJob.newValue;
+  if (area !== 'local') return;
+
+  if (changes.generationLog) {
+    renderLog(changes.generationLog.newValue || []);
+  }
+
+  if (!changes.generationJob) return;
+  const job     = changes.generationJob.newValue;
+  const prevJob = changes.generationJob.oldValue;
 
   // Job was cleared (e.g. by cancel button from another popup instance)
   if (!job) {
@@ -246,15 +287,29 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 
   if (job.status === 'running') {
-    const running = (job.results || []).find(r => r.status === 'running');
-    const siteStr = running ? running.site : 'site';
+    const running     = (job.results || []).find(r => r.status === 'running');
+    const prevRunning = prevJob && (prevJob.results || []).find(r => r.status === 'running');
+    const siteStr     = running ? running.site : 'site';
     showStatus(`⏳ Publishing to ${siteStr}… — safe to close this popup.`, 'loading');
     generateBtn.disabled = true;
     cancelBtn.classList.remove('hidden');
+    if (running && (!prevRunning || prevRunning.site !== running.site)) {
+      appendLog(`Publishing to WordPress: ${running.site}...`);
+    }
   } else {
     generateBtn.disabled = false;
     cancelBtn.classList.remove('hidden');
     renderJobResults(job);
+    const prevResults = (prevJob && prevJob.results) || [];
+    (job.results || []).forEach(r => {
+      const prev = prevResults.find(pr => pr.site === r.site);
+      if (r.status === 'done' && (!prev || prev.status !== 'done')) {
+        appendLog(r.url ? `Done! View page: ${r.url}` : `Published to ${r.site}.`, 'success');
+      }
+      if (r.status === 'error' && (!prev || prev.status !== 'error')) {
+        appendLog(`Error on ${r.site}: ${r.errorMessage || 'unknown error'}`, 'error');
+      }
+    });
   }
 });
 
@@ -268,13 +323,15 @@ generateBtn.addEventListener('click', async () => {
 
   generateBtn.disabled = true;
   showStatus('⏳ Checking backend connection…', 'loading');
+  appendLog('Connecting to backend...');
 
   const healthy = await checkBackendHealth();
   if (!healthy) {
     showStatus(
-      '❌ Backend not reachable.<br>Run <strong>cd backend &amp;&amp; npm start</strong> in your terminal first.',
+      '❌ Backend not reachable.<br>Run <strong>Start-Temu-Backend.bat</strong> first.',
       'error'
     );
+    appendLog('Backend not reachable. Run Start-Temu-Backend.bat first.', 'error');
     generateBtn.disabled = false;
     return;
   }
@@ -287,7 +344,9 @@ generateBtn.addEventListener('click', async () => {
   const keyword   = autoGenerateKeyword(products);
   const siteLabel = site === 'both' ? 'both sites' : site;
 
+  appendLog(`Backend connected. Sending ${products.length} product(s) to Claude AI...`);
   showStatus(`⏳ Starting generation for ${siteLabel}… safe to close this popup.`, 'loading');
+  appendLog(`Claude AI generating page for ${siteLabel}... (60-90s)`);
 
   // Persist job state so reopening the popup shows live progress
   chrome.storage.local.set({
@@ -307,6 +366,7 @@ generateBtn.addEventListener('click', async () => {
     response => {
       if (chrome.runtime.lastError) {
         showStatus(`❌ Background worker error: ${chrome.runtime.lastError.message}`, 'error');
+        appendLog(`Background worker error: ${chrome.runtime.lastError.message}`, 'error');
         generateBtn.disabled = false;
       }
       // Result arrives via chrome.storage.onChanged above

@@ -35,6 +35,9 @@ const BULLET_CSS = `  .tnp-content ul{list-style:none;padding:0;margin:0 0 16px 
   .tnp-content ul li{position:relative;padding-left:1.6em;margin-bottom:8px}
   .tnp-content ul li::before{content:"●";position:absolute;left:0;top:.6em;font-size:.5em;color:#f97316}`;
 
+const IMAGE_CAROUSEL_CSS = `  .tnp-content .product-images{display:flex;overflow-x:auto;gap:8px;margin-bottom:12px;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  .tnp-content .product-images img{width:200px;height:200px;object-fit:cover;border-radius:8px;flex-shrink:0}`;
+
 const COUPON_CSS = `  .coupon-banner{background:linear-gradient(135deg,#f97316,#ea580c);border-radius:12px;padding:28px 24px;margin:28px 0;text-align:center;color:#fff}
   .coupon-tag{display:inline-block;background:rgba(0,0,0,.2);border-radius:20px;padding:4px 14px;font-size:.78rem;font-weight:700;letter-spacing:1px;margin-bottom:12px}
   .coupon-headline{font-size:1.25rem;font-weight:700;margin:0 0 8px}
@@ -59,14 +62,14 @@ function stripEmojis(html) {
 }
 
 function buildProductSummaries(products) {
-  return products.slice(0, 5).map((p, i) => [
+  return products.slice(0, 10).map((p, i) => [
     `### Product ${i + 1}: ${p.title || 'Untitled'}`,
     `- Price: ${p.price || 'N/A'}`,
     `- Rating: ${p.rating || 'N/A'}/5 (${p.reviewCount || 0} reviews)`,
     `- Categories: ${(p.categories || []).join(', ') || 'General'}`,
     `- Affiliate Link: ${p.affiliateLink}`,
     `- Description: ${p.description || 'No description provided.'}`,
-    `- Images: ${(p.images || []).slice(0, 2).map(upgradeImageUrl).join(' | ') || 'none'}`,
+    `- Images (all): ${(p.images || []).map(upgradeImageUrl).join(' | ') || 'none'}`,
   ].join('\n')).join('\n\n');
 }
 
@@ -77,6 +80,24 @@ function toSlug(title) {
     .trim()
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
+}
+
+function buildSeoSlug(products) {
+  const year = new Date().getFullYear();
+  const cats = products.flatMap(p => p.categories || []);
+  let category = 'products';
+  if (cats.length > 0) {
+    const freq = {};
+    cats.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
+    category = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+  }
+  const catSlug = category
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+  return `temu-${catSlug}-coupon-code-alh082428-${year}`;
 }
 
 function autoTitle(products) {
@@ -152,6 +173,13 @@ function injectBulletCss(html) {
   return `<style>\n${BULLET_CSS}\n</style>\n` + html;
 }
 
+// Inject image carousel CSS (idempotent)
+function injectImageCarouselCss(html) {
+  if (html.includes('product-images{') || html.includes('product-images {')) return html;
+  if (/<\/style>/i.test(html)) return html.replace(/<\/style>/i, `${IMAGE_CAROUSEL_CSS}\n</style>`);
+  return `<style>\n${IMAGE_CAROUSEL_CSS}\n</style>\n` + html;
+}
+
 // Wrap all content in .tnp-content so scoped CSS cannot bleed into the theme
 function wrapInTnpContent(html) {
   if (html.includes('class="tnp-content"')) return html;
@@ -213,11 +241,11 @@ ${HTML_START}
 ${HTML_END}
 
 HTML fragment rules:
-1. <style> — ALL rules scoped to .tnp-content (e.g. .tnp-content .product-card{...}), clean minimal design, max-width:960px, font-family sans-serif, card box-shadow 0 2px 8px rgba(0,0,0,.08), orange #f97316 accents, dark #0f3460 promo-footer, responsive. NO emoji characters anywhere.
+1. <style> — ALL rules scoped to .tnp-content (e.g. .tnp-content .product-card{...}), clean minimal design, max-width:960px, font-family sans-serif, card box-shadow 0 2px 8px rgba(0,0,0,.08), orange #f97316 accents, dark #0f3460 promo-footer, responsive. Include .tnp-content .product-images{display:flex;overflow-x:auto;gap:8px} and .tnp-content .product-images img{width:200px;height:200px;object-fit:cover;border-radius:8px;flex-shrink:0}. NO emoji characters anywhere.
 2. <h1> with "${keyword}" naturally
 3. Intro paragraph 80-120 words for "${keyword}"
 4. <div class="coupon-banner"> — orange gradient, ${COUPON_PRIMARY} headline, <a class="coupon-cta" href="${AFFILIATE_URL}">
-5. Up to 5 <article class="product-card"> — h2 (product name, no emoji), image block (use <img src="[url]" alt="..." loading="lazy" style="width:100%;max-height:220px;object-fit:contain"> if image URL is provided; if no image use <div class="img-placeholder" style="background:#f3f4f6;min-height:180px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:#6b7280;font-weight:500;font-size:.9rem">[product name]</div>), price badge, bullet benefits, <a class="cta-btn" href="${AFFILIATE_URL}">
+5. Up to 10 <article class="product-card"> — h2 (product name, no emoji), image carousel: <div class="product-images">[one <img loading="lazy"> per URL from the product Images list with descriptive alt text — include ALL images if multiple exist; if no images use <div class="img-placeholder" style="background:#f3f4f6;min-height:180px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:#6b7280;font-weight:500;font-size:.9rem">[product name]</div>]</div>, price badge, bullet benefits, <a class="cta-btn" href="${AFFILIATE_URL}">
 6. <section class="buying-guide"> — 3-point guide for "${keyword}" shoppers
 7. <section class="why-temu"> — 3 benefit bullets
 8. <section class="promo-footer"> — dark block, ${COUPON_PRIMARY} headline, <a class="coupon-cta" href="${AFFILIATE_URL}">
@@ -284,7 +312,8 @@ HTML fragment rules:
 
   // ─── Guarantee every required field ─────────────────────────────────────────
 
-  if (!parsed.slug)               parsed.slug               = toSlug(parsed.title || pageTitle);
+  // Always use SEO-optimised slug: temu-[category]-coupon-code-alh082428-[year]
+  parsed.slug = buildSeoSlug(products);
   if (!parsed.featured_image_url) parsed.featured_image_url = featuredImageUrl;
   if (!Array.isArray(parsed.categories)) parsed.categories  = ['Deals'];
   if (!Array.isArray(parsed.tags))       parsed.tags        = [keyword];
@@ -316,6 +345,7 @@ HTML fragment rules:
   html = stripEmojis(html);
   html = injectCouponCss(html);
   html = injectBulletCss(html);
+  html = injectImageCarouselCss(html);
   html = injectCouponBanner(html);
   html = injectClosingSection(html);
   html = fixCtaLinks(html);
