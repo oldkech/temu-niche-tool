@@ -56,11 +56,21 @@ app.post('/generate', async (req, res) => {
   const reqStart = Date.now();
   console.log(`\n${'─'.repeat(60)}`);
   console.log(`[${ts()}] REQUEST  site=${site}  products=${products.length}  keyword="${keyword}"`);
+  const validProducts = [];
   products.forEach((p, i) => {
     const imgs  = Array.isArray(p.images) ? p.images.length : 0;
     const title = (p.title || 'Untitled').slice(0, 55);
-    console.log(`          [${String(i + 1).padStart(2)}] imgs=${imgs}  "${title}"`);
+    if (imgs === 0) {
+      console.log(`          [${String(i + 1).padStart(2)}] imgs=0  SKIPPED - no images  "${title}"`);
+    } else {
+      console.log(`          [${String(i + 1).padStart(2)}] imgs=${imgs}  "${title}"`);
+      validProducts.push(p);
+    }
   });
+  if (validProducts.length === 0) {
+    console.log(`          WARNING: all ${products.length} products have 0 images — using full list as fallback`);
+    validProducts.push(...products);
+  }
 
   let step = 'init';
   try {
@@ -72,7 +82,7 @@ app.post('/generate', async (req, res) => {
     console.log(`          model: claude-sonnet-4-6  |  timeout: ${CLAUDE_TIMEOUT_MS / 1000}s`);
 
     const page = await withTimeout(
-      generateNichePage({ products, pageTitle: pageTitle.trim(), keyword: keyword.trim() }),
+      generateNichePage({ products: validProducts, pageTitle: pageTitle.trim(), keyword: keyword.trim() }),
       CLAUDE_TIMEOUT_MS,
       'Claude AI generation'
     );

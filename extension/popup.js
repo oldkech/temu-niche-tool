@@ -109,8 +109,28 @@ function renderProducts() {
 
     const title = document.createElement('div');
     title.className = 'product-title';
-    title.textContent = p.title || 'Untitled product';
     title.title = p.title || '';
+
+    const titleText = document.createElement('span');
+    titleText.textContent = p.title || 'Untitled product';
+
+    const imgCount = (p.images || []).length;
+    const imgBadge = document.createElement('span');
+    imgBadge.textContent = imgCount > 0 ? `${imgCount} img${imgCount !== 1 ? 's' : ''}` : 'NO IMGS';
+    imgBadge.style.cssText = [
+      `color:${imgCount > 0 ? '#16a34a' : '#dc2626'}`,
+      'font-size:10px',
+      'font-weight:700',
+      'margin-left:5px',
+      `background:${imgCount > 0 ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)'}`,
+      'border-radius:3px',
+      'padding:1px 5px',
+      'flex-shrink:0',
+      'vertical-align:middle',
+    ].join(';');
+
+    title.appendChild(titleText);
+    title.appendChild(imgBadge);
 
     const price = document.createElement('div');
     price.className = 'product-price';

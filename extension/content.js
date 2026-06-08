@@ -49,9 +49,38 @@
       }
     }
 
-    // PRIMARY: every img whose src contains kwcdn.com or temu.com (Temu's product CDN)
-    // This is the most reliable source — checked before anything else
+    function isVisible(el) {
+      try {
+        const s = window.getComputedStyle(el);
+        if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      } catch (_) { return true; }
+    }
+
+    // 1. Hero image: largest <img> on page by pixel area (fires after scroll triggers load)
+    let heroImg = null, heroArea = 0;
     document.querySelectorAll('img').forEach(img => {
+      const area = (img.naturalWidth || 0) * (img.naturalHeight || 0);
+      if (area > heroArea) { heroArea = area; heroImg = img; }
+    });
+    if (heroImg) {
+      addImg(heroImg.src);
+      addImg(heroImg.dataset.src);
+    }
+
+    // 2. og:image / twitter:image meta tags
+    [
+      document.querySelector('meta[property="og:image"]'),
+      document.querySelector('meta[name="twitter:image"]'),
+      document.querySelector('meta[name="twitter:image:src"]'),
+    ].forEach(el => { if (el) addImg(el.content || el.getAttribute('content')); });
+    const imgSrcLink = document.querySelector('link[rel="image_src"]');
+    if (imgSrcLink) addImg(imgSrcLink.href);
+
+    // 3. Visible imgs with kwcdn.com or temu.com in src
+    document.querySelectorAll('img').forEach(img => {
+      if (!isVisible(img)) return;
       [img.src, img.dataset.src, img.dataset.lazySrc, img.dataset.original].forEach(src => {
         if (src && /img\.kwcdn\.com|temu\.com/i.test(src)) addImg(src);
       });
@@ -63,51 +92,14 @@
       }
     });
 
-    // SECONDARY: gallery/carousel/thumbnail CSS selector patterns
-    const selectors = [
-      '[class*="gallery"] img',
-      '[class*="swiper"] img',
-      '[class*="carousel"] img',
-      '[class*="thumbnail"] img',
-      '[class*="product-img"] img',
-      '[class*="goods-img"] img',
-      '[class*="preview"] img',
-      '[class*="main-image"] img',
-      '[class*="slide"] img',
-      '[class*="image-list"] img',
-      '[class*="img-list"] img',
-      '[class*="goods-gallery"] img',
-      '[class*="product-gallery"] img',
-      '[class*="pic-list"] img',
-    ];
-    for (const sel of selectors) {
-      try {
-        document.querySelectorAll(sel).forEach(img => {
-          addImg(img.src);
-          addImg(img.dataset.src);
-          addImg(img.dataset.lazySrc);
-          addImg(img.dataset.original);
-          if (img.srcset) {
-            img.srcset.split(',').forEach(part => addImg(part.trim().split(/\s+/)[0]));
-          }
-        });
-      } catch (_) {}
-    }
-
-    // TERTIARY: meta tag sources and any wide visible image
-    [
-      document.querySelector('meta[property="og:image"]'),
-      document.querySelector('meta[name="twitter:image"]'),
-      document.querySelector('meta[name="twitter:image:src"]'),
-    ].forEach(el => { if (el) addImg(el.content || el.getAttribute('content')); });
-    const imgSrcLink = document.querySelector('link[rel="image_src"]');
-    if (imgSrcLink) addImg(imgSrcLink.href);
-
+    // 4. data-src / data-lazy-src on ALL img tags (catches not-yet-visible lazy images)
     document.querySelectorAll('img').forEach(img => {
-      const w = img.naturalWidth || img.width || parseInt(img.getAttribute('width') || '0', 10);
-      if (w > 200) addImg(img.src);
+      addImg(img.dataset.src);
+      addImg(img.dataset.lazySrc);
+      addImg(img.dataset.original);
     });
 
+    console.log(`[Temu Niche] extractImages: ${results.length} images found`);
     return results;
   }
 
@@ -270,19 +262,27 @@
     });
 
     btn.addEventListener('click', () => {
-      // Guard against double-click while scanning
       if (btn.dataset.scanning === 'true') return;
       btn.dataset.scanning = 'true';
       btn.innerHTML = '⏳ Scanning images...';
       btn.style.background = '#ca8a04';
 
-      // Wait 2s for lazy-loaded images to fully appear before scraping
+      // Scroll down ~35% to trigger lazy-load on the product gallery
+      const scrollTarget = Math.floor(document.body.scrollHeight * 0.35);
+      window.scrollTo({ top: scrollTarget, behavior: 'smooth' });
+
+      // Scroll back to top after 900ms so the user isn't disoriented
+      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 900);
+
+      // Extract after 3 seconds — enough time for lazy images to load
       setTimeout(() => {
         btn.dataset.scanning = 'false';
         btn.innerHTML = btn.dataset.originalText;
         btn.style.background = '#16a34a';
 
         const product = extractProductData();
+        console.log(`[Temu Niche] Scraped: "${product.title}" | images: ${product.images.length}`);
+
         chrome.storage.local.get({ selectedProducts: [] }, data => {
           const products = data.selectedProducts;
           const exists = products.some(p => p.productId === product.productId);
@@ -296,7 +296,7 @@
             showConfirmation(btn, false);
           });
         });
-      }, 2000);
+      }, 3000);
     });
 
     document.body.appendChild(btn);
