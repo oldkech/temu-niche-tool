@@ -64,7 +64,7 @@ function stripEmojis(html) {
 }
 
 function buildProductSummaries(products) {
-  return products.slice(0, 10).map((p, i) => [
+  return products.map((p, i) => [
     `### Product ${i + 1}: ${p.title || 'Untitled'}`,
     `- Price: ${p.price || 'N/A'}`,
     `- Rating: ${p.rating || 'N/A'}/5 (${p.reviewCount || 0} reviews)`,
@@ -84,22 +84,58 @@ function toSlug(title) {
     .replace(/-+/g, '-');
 }
 
-function buildSeoSlug(products) {
-  const year = new Date().getFullYear();
+// Detect the niche from breadcrumb categories, then title keywords as fallback.
+// Never returns a raw product title — only a category or extracted keyword group.
+function detectNiche(products) {
+  const genericCats = new Set([
+    'home', 'all', 'deals', 'sale', 'new arrivals', 'women', 'men', 'kids',
+    'clothing', 'fashion', 'accessories', 'electronics', 'sports', 'beauty',
+  ]);
+
+  // 1. Breadcrumb categories (most accurate)
   const cats = products.flatMap(p => p.categories || []);
-  let category = 'products';
   if (cats.length > 0) {
     const freq = {};
     cats.forEach(c => { freq[c] = (freq[c] || 0) + 1; });
-    category = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+    const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+    const specific = sorted.find(([c]) => !genericCats.has(c.toLowerCase()));
+    return (specific || sorted[0])[0];
   }
-  const catSlug = category
+
+  // 2. Title keyword frequency (fallback when no categories)
+  const stopWords = new Set([
+    'the','a','an','and','or','for','in','on','at','to','with','of','from',
+    'pcs','pc','set','pack','new','mini','portable','electric','wireless',
+    'smart','led','usb','type','pro','plus','max','ultra','super','anti',
+    'multi','auto','fast','high','low','long','short','large','small',
+    'black','white','blue','red','green','pink','gray','silver','gold',
+    'temu','cheap','best','deal','sale','buy','shop','get','free','this','that',
+  ]);
+  const freq = {};
+  products.forEach(p => {
+    (p.title || '').toLowerCase()
+      .split(/[\s,\-/|()+]+/)
+      .map(w => w.replace(/[^a-z0-9]/g, ''))
+      .filter(w => w.length > 3 && !stopWords.has(w))
+      .forEach(w => { freq[w] = (freq[w] || 0) + 1; });
+  });
+  const topWords = Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([w]) => w);
+  return topWords.length > 0 ? topWords.join(' ') : 'products';
+}
+
+function buildSeoSlug(products) {
+  const year = new Date().getFullYear();
+  const niche = detectNiche(products);
+  const nicheSlug = niche
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '')
     .trim()
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
-  return `temu-${catSlug}-coupon-code-alh082428-${year}`;
+  return `temu-${nicheSlug}-coupon-code-alh082428-${year}`;
 }
 
 function autoTitle(products) {
@@ -225,12 +261,20 @@ function ensureCouponFaq(faqArray) {
 const HTML_START = '===HTML_BODY_START===';
 const HTML_END   = '===HTML_BODY_END===';
 
-async function generateNichePage({ products, pageTitle, keyword }) {
+async function generateNichePage({ products: rawProducts, pageTitle, keyword }) {
+  // Skip products with no images — they produce broken cards on the page
+  let products = rawProducts.filter(p => Array.isArray(p.images) && p.images.length > 0);
+  if (products.length === 0) {
+    console.warn('  [claude] WARNING: no products have images — using all products as fallback');
+    products = rawProducts;
+  }
+  console.log(`  [claude] Products with images: ${products.length} / ${rawProducts.length} received`);
+
   pageTitle = (pageTitle && pageTitle.trim()) || autoTitle(products);
   keyword   = (keyword   && keyword.trim())   || autoKeyword(products);
 
   const productSummaries = buildProductSummaries(products);
-  const featuredImageUrl = upgradeImageUrl(products.find(p => p.images && p.images.length > 0)?.images[0] || '');
+  const featuredImageUrl = upgradeImageUrl(products[0]?.images[0] || '');
 
   const system = `You are an expert affiliate content writer specialising in deal and coupon sites. \
 You produce clean, engaging, SEO-optimised niche pages that convert readers into buyers. \

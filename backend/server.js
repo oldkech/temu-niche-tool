@@ -56,6 +56,11 @@ app.post('/generate', async (req, res) => {
   const reqStart = Date.now();
   console.log(`\n${'─'.repeat(60)}`);
   console.log(`[${ts()}] REQUEST  site=${site}  products=${products.length}  keyword="${keyword}"`);
+  products.forEach((p, i) => {
+    const imgs  = Array.isArray(p.images) ? p.images.length : 0;
+    const title = (p.title || 'Untitled').slice(0, 55);
+    console.log(`          [${String(i + 1).padStart(2)}] imgs=${imgs}  "${title}"`);
+  });
 
   let step = 'init';
   try {
